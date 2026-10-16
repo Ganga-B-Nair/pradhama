@@ -23,7 +23,13 @@ class Settings:
     insightlaw_timeout_seconds: float = float(os.getenv("INSIGHTLAW_TIMEOUT_SECONDS", "5"))
 
     evidence_dir: str = os.getenv("EVIDENCE_DIR", "../evidence")
+    # PUBLIC_BASE_URL: the frontend's LAN-reachable origin. Used only for the QR
+    # verification link, since /verify is a frontend page (frontend/app/verify).
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:3000")
+    # API_PUBLIC_BASE_URL: this backend's own LAN-reachable origin. Used for the
+    # export HTML/JSON/certificate links, which are served directly by FastAPI
+    # (Jinja2 + qrcode) so printing works with no frontend export page required.
+    api_public_base_url: str = os.getenv("API_PUBLIC_BASE_URL", "http://localhost:8000")
     demo_cache: bool = os.getenv("DEMO_CACHE", "0") == "1"
 
 

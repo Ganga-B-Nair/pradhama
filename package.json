@@ -1,0 +1,24 @@
+{
+  "name": "pradhama",
+  "version": "1.0.0",
+  "description": "- `docs/HACKATHON_PLAN.md` — the current build plan (architecture, tech stack, task split, schedule, risk register) for the 20-hour hackathon build. **Read this first.**\r - `docs/PRD.md` / `docs/TRD.md` / `docs/SRS.md` / `docs/README.md` — the full 9-month pilot requirements the hackathon plan scopes down from.\r - `backend/` — FastAPI app (MongoDB + Neo4j, the 4-agent pipeline, custody chain, export).\r - `frontend/` — Next.js 14 app.\r - `contracts/` — frozen JSON response shapes, also used as the frontend's mock data.\r - `docker-compose.yml` — MongoDB + Neo4j containers (Ollama and the ASR subprocess stay native; see the plan for why).",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ganga-B-Nair/pradhama.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Ganga-B-Nair/pradhama/issues"
+  },
+  "homepage": "https://github.com/Ganga-B-Nair/pradhama#readme"
+}
