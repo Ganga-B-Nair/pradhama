@@ -1,0 +1,13 @@
+{
+  "id": "r-001",
+  "case_id": "c-001",
+  "state": "running",
+  "steps": [
+    {"name": "triage", "state": "done", "note": null},
+    {"name": "metadata", "state": "done", "note": null},
+    {"name": "asr", "state": "running", "note": null},
+    {"name": "timeline", "state": "waiting", "note": null},
+    {"name": "gaps", "state": "waiting", "note": null},
+    {"name": "draft", "state": "waiting", "note": null}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "id": "c-001-v1",
+  "case_id": "c-001",
+  "version": 1,
+  "sentences": [
+    {
+      "sentence": "On 10 October 2026 at approximately 4:00 PM, the complainant received a call from an unknown number claiming to be from the bank.",
+      "event_ids": ["e-000"],
+      "supported": true
+    },
+    {
+      "sentence": "The complainant was later asked to share an OTP, which they did not record uploading evidence for.",
+      "event_ids": [],
+      "supported": false
+    }
+  ]
+}

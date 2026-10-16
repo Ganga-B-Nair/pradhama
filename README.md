@@ -1,5 +1,14 @@
 ## Initial README for TRACE by PRADHAMA
 
+## Repo layout
+
+- `docs/HACKATHON_PLAN.md` — the current build plan (architecture, tech stack, task split, schedule, risk register) for the 20-hour hackathon build. **Read this first.**
+- `docs/PRD.md` / `docs/TRD.md` / `docs/SRS.md` / `docs/README.md` — the full 9-month pilot requirements the hackathon plan scopes down from.
+- `backend/` — FastAPI app (MongoDB + Neo4j, the 4-agent pipeline, custody chain, export).
+- `frontend/` — Next.js 14 app.
+- `contracts/` — frozen JSON response shapes, also used as the frontend's mock data.
+- `docker-compose.yml` — MongoDB + Neo4j containers (Ollama and the ASR subprocess stay native; see the plan for why).
+
 ## Form answers
 
 ### Idea Name

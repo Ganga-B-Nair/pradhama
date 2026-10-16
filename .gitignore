@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+backend/.env
+
+# Node
+node_modules/
+frontend/.next/
+frontend/.env.local
+
+# Data / runtime
+evidence/*
+!evidence/.gitkeep
+cache/*
+!cache/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

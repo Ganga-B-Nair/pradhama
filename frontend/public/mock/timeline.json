@@ -1,0 +1,15 @@
+{
+  "events": [
+    {
+      "id": "e-001",
+      "case_id": "c-001",
+      "timestamp": "2026-10-10T16:10:00+05:30",
+      "timestamp_precision": "exact",
+      "summary": "Debit of Rs 40,000 from account ending 4521",
+      "amount": 40000,
+      "account": "xxxx4521",
+      "source_file_ids": ["f-002"],
+      "source_refs": [{"file_id": "f-002", "line": 3}]
+    }
+  ]
+}

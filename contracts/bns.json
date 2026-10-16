@@ -1,0 +1,28 @@
+{
+  "suggestions": [
+    {
+      "id": "b-001",
+      "case_id": "c-001",
+      "section": "BNS 318(4)",
+      "title": "Cheating",
+      "ingredients": [
+        "Deception of the complainant",
+        "Inducement to part with property",
+        "Wrongful loss or damage"
+      ],
+      "matched_event_ids": ["e-001", "e-003"],
+      "decision": "pending",
+      "source": "fixture"
+    },
+    {
+      "id": "b-002",
+      "case_id": "c-001",
+      "section": "IT Act 66C",
+      "title": "Identity theft",
+      "ingredients": ["Fraudulent use of a unique identification feature (OTP)"],
+      "matched_event_ids": ["e-002"],
+      "decision": "pending",
+      "source": "fixture"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+[
+  {
+    "id": "c-001",
+    "complainant_name": "Demo Complainant",
+    "consent_given": true,
+    "location": "Kochi",
+    "created_at": "2026-10-16T10:00:00+05:30",
+    "status": "review"
+  }
+]

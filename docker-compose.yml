@@ -1,0 +1,28 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: trace-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: trace_demo
+
+  neo4j:
+    image: neo4j:5-community
+    container_name: trace-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474" # browser UI
+      - "7687:7687" # bolt
+    environment:
+      NEO4J_AUTH: neo4j/trace-local-dev
+      NEO4J_PLUGINS: '[]'
+    volumes:
+      - neo4j_data:/data
+
+volumes:
+  mongo_data:
+  neo4j_data:
