@@ -11,7 +11,13 @@ app = FastAPI(title="TRACE API")
 
 app.add_middleware(
     CORSMiddleware,
+    # allow_origin_regex (not just allow_origins) because the demo laptop is
+    # opened by its LAN IP from a phone (for the QR-verify scan) — the browser
+    # sends that LAN origin, not localhost, so a localhost-only allowlist
+    # silently breaks every API call the moment it's opened off a phone.
     allow_origins=["http://localhost:3000"],
+    allow_origin_regex=r"^http://(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+                        r"|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):3000$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

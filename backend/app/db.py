@@ -1,6 +1,6 @@
 """MongoDB: the single source of truth. One shared client, reused everywhere.
 
-Collections: cases, files, audit_chain, runs, timeline_events, gaps, drafts, bns_decisions.
+Collections: cases, files, audit_chain, runs, narrations, timeline_events, gaps, drafts, bns_decisions.
 Nothing here uses multi-document transactions — every write is one document,
 so there is never a transaction held open across a model call.
 """
@@ -30,6 +30,7 @@ def ensure_indexes() -> None:
     db.files.create_index("sha256")
     db.audit_chain.create_index("case_id")
     db.runs.create_index("case_id")
+    db.narrations.create_index("case_id")
     db.timeline_events.create_index("case_id")
     db.gaps.create_index("case_id")
     db.drafts.create_index([("case_id", 1), ("version", 1)])

@@ -4,13 +4,15 @@ No Celery/Redis. FastAPI holds a single asyncio.Queue; a background task consume
 it serially so two cases never compete for Ollama/Whisper memory at once.
 
 Pipeline order is fixed (§4): deterministic stages -> speech-to-text (own
-process, exits) -> LLM stages -> Gap Hunter (no model). This file wires the
-LangGraph StateGraph. If LangGraph isn't working by H11, swap `build_graph()`'s
-body for the `run_pipeline_plain()` fallback below — call sites don't change.
+process, exits) -> LLM stages -> Gap Hunter (no model). Implemented here as a
+plain function rather than a LangGraph StateGraph (the plan's own cut-list
+fallback, §8) — six stages in a fixed order don't need a graph library, and
+this way there's one less moving part on a machine this was never run on.
 """
 import asyncio
-from datetime import datetime
 
+from app.agents import bns_adapter, gaps, metadata, triage
+from app.agents import timeline as timeline_agent
 from app.db import get_db
 
 job_queue: asyncio.Queue = asyncio.Queue()
@@ -34,10 +36,9 @@ def _set_step(run_id: str, name: str, state: str, note: str | None = None):
 
 
 async def run_pipeline(run_id: str):
-    """6 LangGraph nodes: triage, metadata, asr, timeline, gaps, draft.
-    TODO(G/V): replace each _stub with the real agent call. Keep the
-    set_step(running) / set_step(done|failed) bracketing so the UI's polling
-    (GET /api/runs/{run_id}) always reflects real progress.
+    """Runs the 6 stages in order: triage, metadata, asr, timeline, gaps, draft.
+    The set_step(running) / set_step(done|failed) bracketing is what the UI's
+    polling (GET /api/runs/{run_id}) reflects as live progress.
     """
     db = get_db()
     run = db.runs.find_one({"id": run_id})
@@ -60,6 +61,23 @@ async def run_pipeline(run_id: str):
 
 
 async def _run_stage(step_name: str, case_id: str):
-    # TODO(G): "triage", "metadata" -> app.agents.triage / app.agents.metadata
-    # TODO(V): "asr", "timeline", "gaps", "draft" -> app.agents.*
-    raise NotImplementedError(f"stage '{step_name}' not wired yet for case {case_id}")
+    """Deterministic stages run inline; ASR and the Ollama calls inside
+    timeline/draft are blocking, so each stage runs in a worker thread to
+    avoid blocking the asyncio event loop (the API keeps answering other
+    requests while a stage is in progress).
+    """
+    if step_name == "triage":
+        await asyncio.to_thread(triage.run, case_id)
+    elif step_name == "metadata":
+        await asyncio.to_thread(metadata.run, case_id)
+    elif step_name == "asr":
+        await asyncio.to_thread(timeline_agent.run_asr, case_id)
+    elif step_name == "timeline":
+        await asyncio.to_thread(timeline_agent.run_timeline, case_id)
+    elif step_name == "gaps":
+        await asyncio.to_thread(gaps.run, case_id)
+    elif step_name == "draft":
+        await asyncio.to_thread(timeline_agent.run_draft, case_id)
+        await asyncio.to_thread(bns_adapter.run, case_id)
+    else:
+        raise ValueError(f"unknown pipeline stage '{step_name}'")

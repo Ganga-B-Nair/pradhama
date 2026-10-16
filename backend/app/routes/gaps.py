@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.agents import gaps as gaps_agent
 from app.db import get_db
 
 router = APIRouter()
@@ -26,7 +27,8 @@ def patch_gap(gap_id: str, body: GapPatch):
         raise HTTPException(status_code=400, detail="answer or dismiss_reason required")
 
     db.gaps.update_one({"id": gap_id}, {"$set": update})
-    # TODO(V): trigger a re-run of Gap Hunter's rules only (rebuild Neo4j subgraph,
-    # re-evaluate the 6 rules) — see docs/HACKATHON_PLAN.md §6.4 "Re-run after the
-    # officer answers". Not a full pipeline re-run.
-    return {**gap, **update, "id": gap_id, "_id": None}
+    # Gap Hunter re-run only (rebuild Neo4j subgraph, re-evaluate the 6 rules) —
+    # not a full pipeline re-run. §6.4 "Re-run after the officer answers".
+    gaps_agent.run(gap["case_id"])
+    refreshed = db.gaps.find_one({"id": gap_id}, {"_id": 0}) or {**gap, **update, "id": gap_id}
+    return refreshed

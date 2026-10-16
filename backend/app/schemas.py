@@ -34,7 +34,21 @@ class FileRecord(BaseModel):
         "financial_record", "conversation", "media", "call_log", "audio", "other"
     ] | None = None
     is_duplicate_of: str | None = None  # file id of the canonical copy, if deduped
+    screening: dict | None = None  # {label, score, limitation} — Content Triage output
+    metadata: dict | None = None  # {capture_time, make, model, software, gps, conflict} — Metadata agent output
     uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Narration(BaseModel):
+    id: str
+    case_id: str
+    file_id: str
+    malayalam_text: str
+    malayalam_segments: list[dict] = Field(default_factory=list)
+    english_text: str
+    english_segments: list[dict] = Field(default_factory=list)
+    corrected_by: str | None = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 class AuditEntry(BaseModel):
@@ -73,6 +87,7 @@ class TimelineEvent(BaseModel):
     account: str | None = None
     source_file_ids: list[str]
     source_refs: list[dict] = Field(default_factory=list)  # [{file_id, line/segment}]
+    source_kinds: list[str] = Field(default_factory=list)  # e.g. "financial_record", "narration", "call_log"
 
 
 class Gap(BaseModel):

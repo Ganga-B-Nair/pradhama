@@ -1,5 +1,6 @@
 import os
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, UploadFile
 
@@ -50,6 +51,9 @@ def _save_and_hash(case_id: str, upload: UploadFile) -> dict:
         "reason": None,
         "kind": None,  # filled in by the Content Triage agent
         "is_duplicate_of": None,
+        "screening": None,  # filled in by the Content Triage agent
+        "metadata": None,  # filled in by the Metadata agent
+        "uploaded_at": datetime.utcnow(),
     }
     db = get_db()
     db.files.insert_one(dict(record))
