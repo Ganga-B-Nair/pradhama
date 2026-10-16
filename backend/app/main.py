@@ -9,6 +9,7 @@ from app.routes import analysis, auth, cases, export, files
 from app.worker import job_queue, resume_interrupted, worker_loop
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)  # "unknown label" notices on a fresh graph
 app = FastAPI(title="TRACE API")
 
 # The UI normally reaches the API through the Next.js /api proxy (same origin).

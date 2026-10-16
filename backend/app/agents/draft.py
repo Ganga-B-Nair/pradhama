@@ -37,6 +37,8 @@ def _when(e: dict) -> str:
 def template_sentence(e: dict) -> str:
     w = _when(e)
     actor, action = e["actor"], e["action"]
+    if e["type"] == "Transaction" and "credit" in e.get("kinds", []):
+        return f"{w.capitalize()}, {money(e['amount'])} was credited to the complainant's account."
     if e["type"] == "Transaction" and e["source_kinds"] != ["narration"]:
         acc = f" from account {e['account']}" if e.get("account") else ""
         dest = action.replace("Debit by ", "by ").replace("Debit, transfer to", "by transfer to").replace("Debit", "").strip()

@@ -5,9 +5,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     HF_HOME=/models/huggingface
 
-# libgl/glib for OpenCV, ffmpeg for faster-whisper audio decoding
+# libgl/glib for OpenCV, ffmpeg for faster-whisper audio decoding, Tesseract for screenshot OCR
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libglib2.0-0 libgl1 ffmpeg \
+    && apt-get install -y --no-install-recommends libglib2.0-0 libgl1 ffmpeg tesseract-ocr tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

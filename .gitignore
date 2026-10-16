@@ -10,8 +10,6 @@ frontend/.next/
 frontend/.env.local
 
 # Data / runtime
-evidence/*
-!evidence/.gitkeep
 cache/*
 !cache/.gitkeep
 

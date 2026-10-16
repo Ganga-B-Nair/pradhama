@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse, Response
 from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel
 
-from app import custody
+from app import custody, storage
 from app.auth import current_user, require_sho
 from app.config import settings
 from app.db import get_db
@@ -146,9 +146,8 @@ def verify(ref: str, head: str):
         good = 0
         for f in files:
             try:
-                with open(os.path.join(settings.evidence_dir, f["sha256"]), "rb") as fh:
-                    good += custody.sha256_hex(fh.read()) == f["sha256"]
-            except OSError:
+                good += custody.sha256_hex(storage.get(f["sha256"])) == f["sha256"]
+            except Exception:  # noqa: BLE001 - missing original counts as not matching
                 pass
         return {"result": "match", "ref": ref, "export_version": ex["v"] if ex else None, "seq": res["at"]["seq"],
                 "at": res["at"]["at"], "files_checked": len(files), "files_ok": good}

@@ -2,19 +2,20 @@
 
 Each upload is hashed (SHA-256) as it arrives and FILE_RECEIVED is written to the
 custody chain before anything else reads the bytes. Then the type check and
-malware scan run; accepted files are stored as evidence/<sha256>, read-only.
+malware scan run; accepted originals are stored in MongoDB GridFS (app.storage).
+A case holds at most MAX_EVIDENCE evidence files (the narration recording is separate).
 """
 import os
 import re
 import uuid
 
 from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from pydantic import BaseModel
 
-from app import custody
+from app import custody, storage
+from app.agents import parsers
 from app.auth import current_user
-from app.config import settings
 from app.db import get_db
 from app.routes.common import ensure_editable, get_case, mark_stale
 from app.schemas import FileRecord, checked
@@ -29,6 +30,7 @@ ALLOWED = {".jpg": "jpg", ".jpeg": "jpg", ".png": "png", ".webp": "webp", ".heic
 AUDIO_EXT = {".ogg", ".opus", ".mp3", ".m4a", ".wav", ".webm"}
 MAX_FILE = 50 * 1024 * 1024
 MAX_CASE = 500 * 1024 * 1024
+MAX_EVIDENCE = 10
 EICAR = b"EICAR-STANDARD-ANTIVIRUS-TEST-FILE"
 MIME = {"jpg": "image/jpeg", "png": "image/png", "webp": "image/webp", "pdf": "application/pdf", "wav": "audio/wav",
         "mp3": "audio/mpeg", "ogg": "audio/ogg", "m4a": "audio/mp4", "webm": "audio/webm"}
@@ -97,12 +99,7 @@ def store(case: dict, name: str, data: bytes, user: dict, *, narration: bool = F
         db.files.insert_one(dict(checked(FileRecord, rec)))
         custody.append(cid, "FILE_REJECTED", f"{name}: {reason} sha256={sha}", user["name"])
         return clean(rec)
-    path = os.path.join(settings.evidence_dir, sha)
-    os.makedirs(settings.evidence_dir, exist_ok=True)
-    if not os.path.exists(path):
-        with open(path, "wb") as fh:
-            fh.write(data)
-        os.chmod(path, 0o444)
+    storage.put(sha, data, name, MIME.get(kind))
     n = db.files.count_documents({"case_id": cid, "status": "accepted"}) + 1
     rec.update(status="accepted", reason=None, ev_id=f"EV-{n:03d}", sniff=kind, kind=None, lang="—",
                screen=None, meta=None, dup=None)
@@ -118,7 +115,26 @@ def upload_files(case_id: str, files: list[UploadFile], user: dict = Depends(cur
     if not case["complainant"].get("consent_at"):
         raise HTTPException(409, "Record the complainant's consent first.")
     ensure_editable(case)
+    have = evidence_count(case_id)
+    if not files:
+        raise HTTPException(422, "Choose at least one file.")
+    if have + len(files) > MAX_EVIDENCE:
+        left = MAX_EVIDENCE - have
+        raise HTTPException(409, f"A case can hold up to {MAX_EVIDENCE} evidence files. "
+                                 + (f"Only {left} more can be added." if left > 0 else "This case already has 10."))
     return [store(case, f.filename or "unnamed", f.file.read(), user) for f in files]
+
+
+def evidence_count(case_id: str) -> int:
+    return get_db().files.count_documents({"case_id": case_id, "status": "accepted", "narration": {"$ne": True}})
+
+
+@router.get("/api/cases/{case_id}/files/limit")
+def file_limit(case_id: str, user: dict = Depends(current_user)):
+    get_case(case_id)
+    used = evidence_count(case_id)
+    return {"max": MAX_EVIDENCE, "used": used, "left": MAX_EVIDENCE - used,
+            "max_file_mb": MAX_FILE // (1024 * 1024), "allowed": sorted(set(ALLOWED) | AUDIO_EXT)}
 
 
 @router.get("/api/cases/{case_id}/files")
@@ -147,10 +163,7 @@ def view_file(case_id: str, ev_id: str, line: int = 0, user: dict = Depends(curr
     """Opening an original is recorded in the audit trail."""
     f = _file(case_id, ev_id)
     custody.append(case_id, "ORIGINAL_VIEWED", f"{ev_id}{f' line {line}' if line else ''}", user["name"])
-    lines = None
-    if f["ext"] in (".txt", ".csv"):
-        with open(os.path.join(settings.evidence_dir, f["sha256"]), encoding="utf-8", errors="replace") as fh:
-            lines = fh.read().splitlines()
+    lines = parsers.text_lines(f)
     log = clean_all(get_db().audit_chain.find({"case_id": case_id, "detail": {"$regex": f"(^|\\s){ev_id}(\\s|$)"}},
                                               {"_id": 0}).sort("seq", -1).limit(8))
     return {**f, "lines": lines, "access_log": log}
@@ -161,8 +174,8 @@ def raw_file(case_id: str, ev_id: str, download: bool = False, user: dict = Depe
     f = _file(case_id, ev_id)
     if download:
         custody.append(case_id, "ORIGINAL_DOWNLOADED", ev_id, user["name"])
-    return FileResponse(os.path.join(settings.evidence_dir, f["sha256"]), media_type=MIME.get(f.get("sniff"), "application/octet-stream"),
-                        filename=f["name"] if download else None)
+    headers = {"Content-Disposition": f'attachment; filename="{f["name"]}"'} if download else {}
+    return Response(storage.get(f["sha256"]), media_type=MIME.get(f.get("sniff"), "application/octet-stream"), headers=headers)
 
 
 # ----------------------------------------------------------------- narration

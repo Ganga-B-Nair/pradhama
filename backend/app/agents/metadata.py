@@ -14,7 +14,7 @@ from datetime import datetime
 
 from PIL import Image
 
-from app.config import settings
+from app import storage
 from app.db import get_db
 from app.util import IST, parse_iso
 
@@ -51,10 +51,10 @@ def _ratio(v) -> float:
         return v[0] / v[1] if v[1] else 0.0
 
 
-def extract_exif(path: str) -> dict:
+def extract_exif(sha: str) -> dict:
     out = {"capture_time": None, "make": None, "model": None, "software": None, "gps": None}
     try:
-        with Image.open(path) as img:
+        with Image.open(storage.stream(sha)) as img:
             exif = img.getexif()
     except Exception:
         return out
@@ -92,7 +92,7 @@ def stated_town(text: str | None):
 
 
 def analyse(f: dict, case: dict) -> dict:
-    exif = extract_exif(os.path.join(settings.evidence_dir, f["sha256"]))
+    exif = extract_exif(f["sha256"])
     if not any(exif.values()):
         return {"status": "Not available", "fields": {}, "geo": None, "conflicts": [], "why": NO_EXIF_WHY}
     fields, conflicts = {}, []

@@ -45,14 +45,17 @@ def rebuild_case_subgraph(case_id: str, g) -> None:
     by_type: dict[str, list] = {}
     for a, t, b in g.edges:
         by_type.setdefault(t, []).append({"a": a, "b": b})
-    with get_driver().session() as s:
-        s.run("MATCH (n {case_id: $cid}) DETACH DELETE n", cid=case_id)
+    def write(tx):  # one transaction: readers never see a half-rebuilt case
+        tx.run("MATCH (n {case_id: $cid}) DETACH DELETE n", cid=case_id).consume()
         for labels, rows in by_labels.items():
-            s.run(f"UNWIND $rows AS r CREATE (n:{':'.join(labels)}) SET n = r", rows=rows)
+            tx.run(f"UNWIND $rows AS r CREATE (n:{':'.join(labels)}) SET n = r", rows=rows).consume()
         for t, rows in by_type.items():
-            s.run(f"""UNWIND $rows AS r
-                      MATCH (a {{case_id: $cid, nid: r.a}}) MATCH (b {{case_id: $cid, nid: r.b}})
-                      CREATE (a)-[:{t}]->(b)""", rows=rows, cid=case_id)
+            tx.run(f"""UNWIND $rows AS r
+                       MATCH (a {{case_id: $cid, nid: r.a}}) MATCH (b {{case_id: $cid, nid: r.b}})
+                       CREATE (a)-[:{t}]->(b)""", rows=rows, cid=case_id).consume()
+
+    with get_driver().session() as s:
+        s.execute_write(write)
 
 
 def run_cypher(query: str, **params):

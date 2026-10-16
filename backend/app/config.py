@@ -25,7 +25,6 @@ class Settings:
     insightlaw_base_url: str = os.getenv("INSIGHTLAW_BASE_URL", "https://insightlaw.in")
     insightlaw_timeout_seconds: float = float(os.getenv("INSIGHTLAW_TIMEOUT_SECONDS", "5"))
 
-    evidence_dir: str = os.getenv("EVIDENCE_DIR", "../evidence")
     cache_dir: str = os.getenv("CACHE_DIR", "../cache")
     # PUBLIC_BASE_URL: the frontend's LAN-reachable origin, encoded in the QR
     # code. A phone can't reach `localhost`, so set it to http://<LAN IP>:3000

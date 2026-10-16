@@ -13,7 +13,7 @@ import os
 import subprocess
 import sys
 
-from app import custody
+from app import custody, storage
 from app.config import settings
 from app.db import get_db
 from app.util import now_iso
@@ -60,10 +60,11 @@ def transcribe(case_id: str) -> str:
     if n.get("status") == "done":
         return f"{len(n['segments'])} segments (transcribed earlier)"
     db.narrations.update_one({"case_id": case_id}, {"$set": {"status": "transcribing", "error": None}})
-    audio_path = os.path.join(settings.evidence_dir, n["audio_sha"])
     cached = False
     try:
-        result = _run_subprocess(audio_path)
+        audio = db.files.find_one({"case_id": case_id, "ev_id": n["audio_ev"]}) or {}
+        with storage.temp_copy(n["audio_sha"], audio.get("ext", "")) as audio_path:
+            result = _run_subprocess(audio_path)
         os.makedirs(settings.cache_dir, exist_ok=True)
         with open(_cache_path(n["audio_sha"]), "w", encoding="utf-8") as f:
             json.dump(result, f, ensure_ascii=False)

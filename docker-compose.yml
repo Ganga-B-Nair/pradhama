@@ -40,7 +40,6 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b-instruct}
       ASR_MODEL_SIZE: ${ASR_MODEL_SIZE:-small}
       ASR_DEVICE: cpu
-      EVIDENCE_DIR: /data/evidence
       CACHE_DIR: /data/cache
       # Set to http://<laptop LAN IP>:3000 so the QR code opens from a phone.
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
@@ -49,7 +48,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./evidence:/data/evidence
       - ./cache:/data/cache
       - whisper_models:/models
     depends_on:
