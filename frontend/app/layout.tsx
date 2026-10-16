@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { ReactNode } from "react";
+import { SessionProvider } from "@/lib/session";
 
 export const metadata = {
   title: "TRACE",
@@ -9,7 +10,10 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-slate-50 text-slate-900">{children}</body>
+      <body>
+        <SessionProvider>{children}</SessionProvider>
+        <footer>TRACE · demo build with fictional sample data · not for real cases · the officer files the FIR, not TRACE.</footer>
+      </body>
     </html>
   );
 }

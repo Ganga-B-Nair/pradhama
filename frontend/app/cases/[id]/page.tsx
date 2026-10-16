@@ -1,134 +1,110 @@
 "use client";
-import { useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import RequireUser from "@/components/RequireUser";
+import { StatusTag } from "@/components/case/bits";
+import { CaseProvider, Src } from "@/components/case/ctx";
+import SourceModal from "@/components/case/SourceModal";
+import Complainant from "@/components/case/Complainant";
+import Evidence from "@/components/case/Evidence";
+import Narration from "@/components/case/Narration";
+import Analysis from "@/components/case/Analysis";
+import Manifest from "@/components/case/Manifest";
+import Timeline from "@/components/case/Timeline";
+import Gaps from "@/components/case/Gaps";
+import Draft from "@/components/case/Draft";
+import Bns from "@/components/case/Bns";
+import Referrals from "@/components/case/Referrals";
+import Approval from "@/components/case/Approval";
+import Export from "@/components/case/Export";
+import Audit from "@/components/case/Audit";
 import { api } from "@/lib/api";
+import { useSession } from "@/lib/session";
+import { cap, fmt } from "@/lib/util";
 
-type Tab = "progress" | "manifest" | "timeline" | "gaps" | "draft" | "bns" | "export";
+const ROLE_TABS: Record<string, string[]> = {
+  officer: ["complainant", "evidence", "narration", "analysis", "manifest", "timeline", "gaps", "draft", "bns", "referrals", "approval"],
+  sho: ["complainant", "evidence", "narration", "analysis", "manifest", "timeline", "gaps", "draft", "bns", "referrals", "approval", "export", "audit"],
+};
+const REVIEW = ["manifest", "timeline", "gaps", "draft", "bns", "referrals"];
+const VIEWS: Record<string, () => JSX.Element> = {
+  complainant: () => <Complainant />, evidence: Evidence, narration: Narration, analysis: Analysis, manifest: Manifest,
+  timeline: Timeline, gaps: Gaps, draft: Draft, bns: Bns, referrals: Referrals, approval: Approval, export: Export, audit: Audit,
+};
 
-// Single case-detail page with tabs, per docs/HACKATHON_PLAN.md's core journey
-// (PRD §1.5). TODO(N): split into components/ once each tab has real content;
-// this file is the scaffold so every screen exists and is routable from H1.
-export default function CaseDetailPage({ params }: { params: { id: string } }) {
-  const [tab, setTab] = useState<Tab>("progress");
-  const [manifest, setManifest] = useState<any>(null);
-  const [timeline, setTimeline] = useState<any>(null);
-  const [gaps, setGaps] = useState<any>(null);
-  const [draft, setDraft] = useState<any>(null);
-  const [bns, setBns] = useState<any>(null);
+function Workspace() {
+  const { id } = useParams<{ id: string }>();
+  const search = useSearchParams();
+  const router = useRouter();
+  const { user, L } = useSession();
+  const [c, setC] = useState<any>(null);
+  const [err, setErr] = useState("");
+  const [segments, setSegments] = useState<any[]>([]);
+  const [src, setSrc] = useState<Src | null>(null);
 
-  useEffect(() => {
-    api.getManifest(params.id).then(setManifest);
-    api.getTimeline(params.id).then(setTimeline);
-    api.getGaps(params.id).then(setGaps);
-    api.getDraft(params.id).then(setDraft);
-    api.getBns(params.id).then(setBns);
-  }, [params.id]);
+  const reload = useCallback(async () => {
+    try { setC(await api.get(`/cases/${id}`)); } catch (e: any) { setErr(e.message); }
+  }, [id]);
+  const reloadNarration = useCallback(async () => {
+    const n = await api.get(`/cases/${id}/narration`).catch(() => null);
+    setSegments(n?.segments || []);
+  }, [id]);
+  useEffect(() => { reload(); reloadNarration(); }, [reload, reloadNarration]);
 
-  const tabs: Tab[] = ["progress", "manifest", "timeline", "gaps", "draft", "bns", "export"];
+  if (err) return <main>{err}</main>;
+  if (!c || !user) return <main className="muted">Loading…</main>;
 
-  return (
-    <main className="mx-auto max-w-4xl p-8">
-      <h1 className="mb-4 text-2xl font-semibold">Case {params.id}</h1>
-      <nav className="mb-6 flex gap-2 border-b">
-        {tabs.map((t) => (
-          <button
-            key={t}
-            className={`px-3 py-2 ${tab === t ? "border-b-2 border-slate-900 font-medium" : "text-slate-500"}`}
-            onClick={() => setTab(t)}
-          >
-            {t}
-          </button>
-        ))}
-      </nav>
+  const tabs = ROLE_TABS[user.role];
+  const def = !c.complainant.consent_at ? "complainant" : c.analysis.done ? "manifest" : c.files_count ? "narration" : "evidence";
+  const want = search.get("tab") || def;
+  const tab = tabs.includes(want) ? want : tabs[0];
+  const setTab = (t: string) => { router.replace(`/cases/${id}?tab=${t}`, { scroll: true }); window.scrollTo(0, 0); };
+  const locked = ["approved", "exported"].includes(c.status);
+  const canEdit = !locked && !c.analysis.running;
+  const isSho = user.role === "sho";
 
-      {tab === "progress" && (
-        <div className="text-slate-500">
-          {/* TODO(N): POST /api/cases/{id}/runs then poll GET /api/runs/{run_id} every 1.5s,
-              render each of the 6 steps' state (waiting/running/done/failed/skipped) */}
-          Run progress — polling not yet wired.
-        </div>
-      )}
-
-      {tab === "manifest" && (
-        <ul className="space-y-2">
-          {manifest?.files?.map((f: any) => (
-            <li key={f.id} className="rounded border bg-white p-3">
-              <div className="font-medium">{f.name}</div>
-              <div className="text-sm text-slate-500">sha256: {f.sha256}</div>
-              {f.screening && (
-                <div className="mt-1 text-sm">
-                  {f.screening.label} —{" "}
-                  <span className="text-slate-400">{f.screening.limitation}</span>
-                </div>
-              )}
-              {/* TODO(N): dedup badge when is_duplicate_of is set; metadata conflict line */}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {tab === "timeline" && (
-        <ul className="space-y-2">
-          {/* TODO(N): replace with vis-timeline; click a source chip -> highlight the source file line */}
-          {timeline?.events?.map((e: any) => (
-            <li key={e.id} className="rounded border bg-white p-3">
-              <div className="text-sm text-slate-500">{e.timestamp}</div>
-              <div>{e.summary}</div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {tab === "gaps" && (
-        <ul className="space-y-2">
-          {gaps?.gaps?.map((g: any) => (
-            <li key={g.id} className="rounded border bg-white p-3">
-              <div>{g.question}</div>
-              {/* TODO(N): PATCH /api/gaps/{id} with an answer or a dismiss reason;
-                  re-fetch gaps after, since the backend re-runs the rules */}
-              <div className="mt-1 text-sm text-slate-400">status: {g.status}</div>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {tab === "draft" && (
-        <div className="space-y-2">
-          {draft?.sentences?.map((s: any, i: number) => (
-            <p
-              key={i}
-              className={s.supported ? "cursor-pointer hover:bg-amber-50" : "bg-red-50 text-red-700"}
-              title={s.supported ? `Sources: ${s.event_ids.join(", ")}` : "Unsupported — needs officer review"}
-            >
-              {s.sentence}
-              {!s.supported && <span className="ml-2 text-xs font-medium">Unsupported — needs officer review</span>}
-            </p>
-          ))}
-          {/* TODO(N): click a sentence -> highlight the cited source in the manifest/timeline */}
-        </div>
-      )}
-
-      {tab === "bns" && (
-        <ul className="space-y-2">
-          {bns?.suggestions?.map((b: any) => (
-            <li key={b.id} className="rounded border bg-white p-3">
-              <div className="font-medium">{b.section} — {b.title}</div>
-              <ul className="ml-4 list-disc text-sm text-slate-500">
-                {b.ingredients.map((ing: string, i: number) => <li key={i}>{ing}</li>)}
-              </ul>
-              <div className="mt-1 text-xs text-slate-400">Advisory: SHO decides</div>
-              {/* TODO(N): accept/reject buttons -> POST /api/bns/{id}/decision, SHO role only */}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {tab === "export" && (
-        <div className="text-slate-500">
-          {/* TODO(N): SHO approve button -> POST /api/cases/{id}/approve, then
-              POST /api/cases/{id}/export; show the QR code and §63 draft link */}
-          Export — requires SHO approval first.
-        </div>
-      )}
-    </main>
+  const done: Record<string, boolean> = {
+    complainant: !!c.complainant.consent_at, evidence: c.files_count > 0, narration: c.narration_segments > 0,
+    analysis: !!c.analysis.done, approval: locked, export: c.exports_count > 0,
+  };
+  const btn = (t: string) => (
+    <button key={t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{L(t)}{done[t] ? " ✓" : ""}</button>
   );
+  const steps: JSX.Element[] = [];
+  let n = 0;
+  for (const t of ["complainant", "evidence", "narration", "analysis", "REVIEW", "approval", "export"]) {
+    if (t === "REVIEW") {
+      const rt = REVIEW.filter((x) => tabs.includes(x));
+      if (n++) steps.push(<span key="sep-r" className="sep">›</span>);
+      steps.push(<span key="g-r" className="group">{n}. Review</span>, ...rt.map(btn));
+      continue;
+    }
+    if (!tabs.includes(t)) continue;
+    if (n++) steps.push(<span key={`sep-${t}`} className="sep">›</span>);
+    steps.push(<span key={`g-${t}`} className="group">{n}.</span>, btn(t));
+  }
+  if (tabs.includes("audit")) steps.push(<span key="sp" style={{ marginLeft: "auto" }} />, btn("audit"));
+
+  const View = VIEWS[tab];
+  return (
+    <CaseProvider value={{ c, reload, tab, setTab, canEdit, isSho, locked, segments, reloadNarration, openSrc: setSrc }}>
+      <div className="casehead">
+        <b>{c.ref}</b><StatusTag s={c.status} /><span>{c.complainant.name}</span>
+        <span className="muted">Language: {c.complainant.language}</span>
+        <span>Open gaps: <b>{c.open_gaps}</b></span><span className="muted">{c.files_count} files</span>
+      </div>
+      <div className="steps">{steps}</div>
+      <main>
+        {locked && <div className="note okbar">{cap(c.status)} on {fmt(c.approval.at)} by {c.approval.by} (draft v{c.approval.version}). The case is read-only.{isSho ? " Reopen it from Approval if a change is needed." : ""}</div>}
+        {c.analysis.stale && !locked && !c.analysis.running && <div className="note warnbar">Evidence or narration changed after the last analysis. <button className="link" onClick={() => setTab("analysis")}>Run analysis again</button></div>}
+        {c.sent_back && !locked && c.status === "review" && <div className="note warnbar">Sent back by {c.sent_back.by} on {fmt(c.sent_back.at)}: “{c.sent_back.comment}”</div>}
+        <View key={tab} />
+      </main>
+      {src && <SourceModal src={src} onClose={() => setSrc(null)} />}
+    </CaseProvider>
+  );
+}
+
+export default function Page() {
+  return <RequireUser bare><Suspense fallback={<main className="muted">Loading…</main>}><Workspace /></Suspense></RequireUser>;
 }

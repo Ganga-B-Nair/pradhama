@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{{ case.ref }} BSA s.63 certificate helper</title>
+<style>
+body{font:13px/1.5 system-ui,"Nirmala UI",sans-serif;margin:24px;color:#000}h1{font-size:18px}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:5px;text-align:left;vertical-align:top}
+.mono{font-family:Consolas,monospace;font-size:11px;word-break:break-all}.draft{color:#b42318;font-weight:700;font-size:15px}
+@media print{button{display:none}}
+</style></head><body>
+<p class="draft">Draft — officer signature required</p>
+<h1>Certificate helper under Bharatiya Sakshya Adhiniyam, 2023, s.63</h1>
+<p>(Section and template to be verified by legal review.) {{ station }} · case {{ case.ref }} · prepared {{ generated_at }}</p>
+<p>The electronic records listed below were received at this station, hashed with SHA-256 on arrival and stored read-only.
+The hash values below identify each record exactly.</p>
+<table><tr><th>ID</th><th>File</th><th>SHA-256</th><th>Received</th></tr>
+{% for f in files %}<tr><td>{{ f.ev_id }}</td><td>{{ f.name }}</td><td class="mono">{{ f.sha256 }}</td><td>{{ fmt(f.uploaded_at) }}</td></tr>{% endfor %}
+</table>
+<p>Hash algorithm: SHA-256 · Audit chain head: <span class="mono">{{ ex.head }}</span></p>
+<p style="margin-top:48px">Signature: ____________________ &nbsp; Name and designation: ____________________ &nbsp; Date: __________</p>
+<button onclick="print()">Print / save as PDF</button>
+</body></html>

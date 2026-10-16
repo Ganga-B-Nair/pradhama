@@ -1,194 +1,143 @@
-"""Metadata Agent — deterministic, owned by G.
-docs/HACKATHON_PLAN.md §6.2.
+"""Metadata Agent — deterministic. docs/HACKATHON_PLAN.md §6.2.
 
-Missing EXIF is "Not available" in neutral grey — never a warning (WhatsApp
-strips it from nearly everything). Geocoding uses a small offline table of
-~30 Kerala towns; no Nominatim, no network call.
+Extracts EXIF (capture time, make/model, software, GPS) with Pillow. Flags a
+conflict when an editing-software tag sits on a claimed phone photo or
+screenshot, the capture time is after the upload time, or GPS is more than
+50 km from the place stated in the case.
+
+Missing EXIF is "Not available" in neutral grey (WhatsApp strips it) — never a
+warning. Geocoding is an offline table of Kerala towns; no network call.
 """
 import math
 import os
 from datetime import datetime
 
-import piexif
+from PIL import Image
 
 from app.config import settings
 from app.db import get_db
+from app.util import IST, parse_iso
 
-# Approximate town-centre coordinates; good enough for a "near/far from the
-# stated place" conflict check, not for precise mapping.
-KERALA_TOWNS: list[dict] = [
-    {"name": "Thiruvananthapuram", "lat": 8.5241, "lon": 76.9366},
-    {"name": "Neyyattinkara", "lat": 8.4005, "lon": 77.0859},
-    {"name": "Attingal", "lat": 8.6975, "lon": 76.8151},
-    {"name": "Varkala", "lat": 8.7379, "lon": 76.7163},
-    {"name": "Kollam", "lat": 8.8932, "lon": 76.6141},
-    {"name": "Punalur", "lat": 9.0083, "lon": 76.9306},
-    {"name": "Pathanamthitta", "lat": 9.2648, "lon": 76.7870},
-    {"name": "Thiruvalla", "lat": 9.3833, "lon": 76.5833},
-    {"name": "Chengannur", "lat": 9.3167, "lon": 76.6167},
-    {"name": "Kayamkulam", "lat": 9.1759, "lon": 76.5020},
-    {"name": "Alappuzha", "lat": 9.4981, "lon": 76.3388},
-    {"name": "Changanassery", "lat": 9.4421, "lon": 76.5367},
-    {"name": "Kottayam", "lat": 9.5916, "lon": 76.5222},
-    {"name": "Ernakulam", "lat": 9.9816, "lon": 76.2999},
-    {"name": "Kochi", "lat": 9.9312, "lon": 76.2673},
-    {"name": "Aluva", "lat": 10.1081, "lon": 76.3522},
-    {"name": "Perumbavoor", "lat": 10.1121, "lon": 76.4759},
-    {"name": "Muvattupuzha", "lat": 9.9833, "lon": 76.5833},
-    {"name": "Angamaly", "lat": 10.1960, "lon": 76.3860},
-    {"name": "Thodupuzha", "lat": 9.8958, "lon": 76.7183},
-    {"name": "Idukki", "lat": 9.8500, "lon": 76.9700},
-    {"name": "Thrissur", "lat": 10.5276, "lon": 76.2144},
-    {"name": "Guruvayur", "lat": 10.5944, "lon": 76.0400},
-    {"name": "Chalakudy", "lat": 10.3000, "lon": 76.3333},
-    {"name": "Palakkad", "lat": 10.7867, "lon": 76.6548},
-    {"name": "Ottapalam", "lat": 10.7725, "lon": 76.3769},
-    {"name": "Shoranur", "lat": 10.7556, "lon": 76.2694},
-    {"name": "Malappuram", "lat": 11.0510, "lon": 76.0711},
-    {"name": "Kozhikode", "lat": 11.2588, "lon": 75.7804},
-    {"name": "Vatakara", "lat": 11.6082, "lon": 75.5912},
-    {"name": "Kannur", "lat": 11.8745, "lon": 75.3704},
-    {"name": "Payyanur", "lat": 12.1000, "lon": 75.2000},
-    {"name": "Kanhangad", "lat": 12.3167, "lon": 75.0833},
-    {"name": "Kasaragod", "lat": 12.4996, "lon": 74.9869},
-    {"name": "Wayanad", "lat": 11.6854, "lon": 76.1320},
+KERALA_TOWNS = [
+    ("Thiruvananthapuram", 8.5241, 76.9366), ("Neyyattinkara", 8.4005, 77.0859), ("Attingal", 8.6975, 76.8151),
+    ("Varkala", 8.7379, 76.7163), ("Kollam", 8.8932, 76.6141), ("Punalur", 9.0083, 76.9306),
+    ("Pathanamthitta", 9.2648, 76.7870), ("Thiruvalla", 9.3833, 76.5833), ("Kayamkulam", 9.1759, 76.5020),
+    ("Alappuzha", 9.4981, 76.3388), ("Changanassery", 9.4421, 76.5367), ("Kottayam", 9.5916, 76.5222),
+    ("Thodupuzha", 9.8958, 76.7183), ("Muvattupuzha", 9.9833, 76.5833), ("Kochi", 9.9312, 76.2673),
+    ("Ernakulam", 9.9816, 76.2999), ("Kakkanad", 10.0159, 76.3419), ("Edappally", 10.0261, 76.3083),
+    ("Kalamassery", 10.0511, 76.3153), ("Aluva", 10.1081, 76.3522), ("Perumbavoor", 10.1121, 76.4759),
+    ("Angamaly", 10.1960, 76.3860), ("Chalakudy", 10.3000, 76.3333), ("Thrissur", 10.5276, 76.2144),
+    ("Guruvayur", 10.5944, 76.0400), ("Palakkad", 10.7867, 76.6548), ("Ottapalam", 10.7725, 76.3769),
+    ("Malappuram", 11.0510, 76.0711), ("Kozhikode", 11.2588, 75.7804), ("Kalpetta", 11.6085, 76.0830),
+    ("Vatakara", 11.6082, 75.5912), ("Kannur", 11.8745, 75.3704), ("Payyanur", 12.1000, 75.2000),
+    ("Kasaragod", 12.4996, 74.9869),
 ]
-
-EDITING_SOFTWARE_KEYWORDS = ("photoshop", "snapseed", "picsart", "gimp", "lightroom", "affinity")
-GPS_CONFLICT_DISTANCE_KM = 50
-GEOCODE_NEAREST_RADIUS_KM = 40
-
-
-def _dms_to_decimal(dms: tuple | None, ref: bytes | None) -> float | None:
-    if not dms or not ref:
-        return None
-    degrees = dms[0][0] / dms[0][1]
-    minutes = dms[1][0] / dms[1][1]
-    seconds = dms[2][0] / dms[2][1]
-    decimal = degrees + minutes / 60 + seconds / 3600
-    if ref in (b"S", b"W"):
-        decimal = -decimal
-    return decimal
+EDITING_SOFTWARE = ("photoshop", "snapseed", "picsart", "gimp", "lightroom", "affinity", "canva", "pixlr")
+GPS_CONFLICT_KM = 50
+GEOCODE_RADIUS_KM = 40
+NO_EXIF_WHY = "No EXIF data in this file. Messaging apps usually remove it when sharing; this is normal and not a concern."
 
 
-def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    r = 6371.0
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    d_phi = math.radians(lat2 - lat1)
-    d_lambda = math.radians(lon2 - lon1)
-    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+def _km(lat1, lon1, lat2, lon2) -> float:
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = math.sin(math.radians(lat2 - lat1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2
+    return 2 * 6371 * math.asin(math.sqrt(a))
 
 
-def extract_exif(image_path: str) -> dict:
-    """Pillow + piexif -> {capture_time, make, model, software, gps: {lat, lon} | None}.
-    Any field piexif can't find is left None — "Not available" is a UI-layer
-    decision, not something this function decides.
-    """
-    result: dict = {"capture_time": None, "make": None, "model": None, "software": None, "gps": None}
+def _ratio(v) -> float:
     try:
-        exif_dict = piexif.load(image_path)
+        return float(v)
+    except TypeError:
+        return v[0] / v[1] if v[1] else 0.0
+
+
+def extract_exif(path: str) -> dict:
+    out = {"capture_time": None, "make": None, "model": None, "software": None, "gps": None}
+    try:
+        with Image.open(path) as img:
+            exif = img.getexif()
     except Exception:
-        return result
-
-    zeroth = exif_dict.get("0th", {})
-    exif_ifd = exif_dict.get("Exif", {})
-    gps_ifd = exif_dict.get("GPS", {})
-
-    def _decode(value):
-        return value.decode(errors="ignore").strip() if isinstance(value, bytes) else value
-
-    result["make"] = _decode(zeroth.get(piexif.ImageIFD.Make))
-    result["model"] = _decode(zeroth.get(piexif.ImageIFD.Model))
-    result["software"] = _decode(zeroth.get(piexif.ImageIFD.Software))
-
-    raw_dt = _decode(exif_ifd.get(piexif.ExifIFD.DateTimeOriginal))
+        return out
+    if not exif:
+        return out
+    s = lambda v: v.strip("\x00 ").strip() if isinstance(v, str) else None  # noqa: E731
+    out["make"], out["model"], out["software"] = s(exif.get(0x010F)), s(exif.get(0x0110)), s(exif.get(0x0131))
+    raw_dt = exif.get_ifd(0x8769).get(0x9003) or exif.get(0x0132)
     if raw_dt:
         try:
-            result["capture_time"] = datetime.strptime(raw_dt, "%Y:%m:%d %H:%M:%S").isoformat()
+            out["capture_time"] = datetime.strptime(raw_dt.strip("\x00"), "%Y:%m:%d %H:%M:%S").replace(tzinfo=IST).isoformat()
         except ValueError:
             pass
-
-    if gps_ifd:
-        lat = _dms_to_decimal(gps_ifd.get(piexif.GPSIFD.GPSLatitude), gps_ifd.get(piexif.GPSIFD.GPSLatitudeRef))
-        lon = _dms_to_decimal(gps_ifd.get(piexif.GPSIFD.GPSLongitude), gps_ifd.get(piexif.GPSIFD.GPSLongitudeRef))
-        if lat is not None and lon is not None:
-            result["gps"] = {"lat": lat, "lon": lon}
-
-    return result
-
-
-def _find_case_town(location_text: str | None) -> dict | None:
-    if not location_text:
-        return None
-    lowered = location_text.lower()
-    for town in KERALA_TOWNS:
-        if town["name"].lower() in lowered:
-            return town
-    return None
+    gps = exif.get_ifd(0x8825)
+    if gps.get(2) and gps.get(4):
+        dms = lambda a: _ratio(a[0]) + _ratio(a[1]) / 60 + _ratio(a[2]) / 3600  # noqa: E731
+        lat, lon = dms(gps[2]), dms(gps[4])
+        if gps.get(1) == "S":
+            lat = -lat
+        if gps.get(3) == "W":
+            lon = -lon
+        out["gps"] = {"lat": lat, "lon": lon}
+    return out
 
 
-def flag_conflicts(exif: dict, case: dict, upload_time: datetime) -> list[str]:
-    """Editing-software tag on a claimed phone photo/screenshot; capture time
-    after upload time; GPS >50km from the stated location."""
-    conflicts: list[str] = []
-
-    software = (exif.get("software") or "").lower()
-    if any(keyword in software for keyword in EDITING_SOFTWARE_KEYWORDS):
-        conflicts.append(f"Editing software tag found on a claimed screenshot ({exif['software']})")
-
-    capture_time = exif.get("capture_time")
-    if capture_time:
-        try:
-            if datetime.fromisoformat(capture_time) > upload_time:
-                conflicts.append("Capture time recorded in the file is after the upload time")
-        except ValueError:
-            pass
-
-    gps = exif.get("gps")
-    town = _find_case_town(case.get("location"))
-    if gps and town:
-        distance = _haversine_km(gps["lat"], gps["lon"], town["lat"], town["lon"])
-        if distance > GPS_CONFLICT_DISTANCE_KM:
-            conflicts.append(
-                f"GPS location is about {round(distance)} km from the stated place ({town['name']})"
-            )
-
-    return conflicts
+def nearest_town(lat: float, lon: float) -> tuple[str, float] | None:
+    name, tlat, tlon = min(KERALA_TOWNS, key=lambda t: _km(lat, lon, t[1], t[2]))
+    d = _km(lat, lon, tlat, tlon)
+    return (name, d) if d <= GEOCODE_RADIUS_KM else None
 
 
-def geocode_nearest_town(lat: float, lon: float) -> dict | None:
-    """Nearest of KERALA_TOWNS within 40km, or None."""
-    nearest = min(KERALA_TOWNS, key=lambda t: _haversine_km(lat, lon, t["lat"], t["lon"]))
-    distance = _haversine_km(lat, lon, nearest["lat"], nearest["lon"])
-    if distance > GEOCODE_NEAREST_RADIUS_KM:
-        return None
-    return {"name": nearest["name"], "distance_km": round(distance, 1)}
+def stated_town(text: str | None):
+    low = (text or "").lower()
+    return next((t for t in KERALA_TOWNS if t[0].lower() in low), None)
 
 
-def run(case_id: str) -> None:
-    """Entry point called from app.worker._run_stage('metadata', case_id)."""
+def analyse(f: dict, case: dict) -> dict:
+    exif = extract_exif(os.path.join(settings.evidence_dir, f["sha256"]))
+    if not any(exif.values()):
+        return {"status": "Not available", "fields": {}, "geo": None, "conflicts": [], "why": NO_EXIF_WHY}
+    fields, conflicts = {}, []
+    if exif["capture_time"]:
+        fields["Capture time"] = datetime.fromisoformat(exif["capture_time"]).strftime("%d %b %Y, %H:%M")
+    if exif["make"] or exif["model"]:
+        fields["Device"] = " ".join(x for x in (exif["make"], exif["model"]) if x)
+    if exif["software"]:
+        fields["Software"] = exif["software"]
+    geo = None
+    if exif["gps"]:
+        lat, lon = exif["gps"]["lat"], exif["gps"]["lon"]
+        fields["GPS"] = f"{lat:.4f}, {lon:.4f}"
+        near = nearest_town(lat, lon)
+        geo = f"{near[0]} (about {near[1]:.0f} km, offline gazetteer)" if near else "Outside the offline gazetteer (Kerala towns only)"
+        town = stated_town(case.get("complainant", {}).get("address"))
+        if town:
+            d = _km(lat, lon, town[1], town[2])
+            if d > GPS_CONFLICT_KM:
+                conflicts.append(f"GPS position is about {d:.0f} km from the place stated in the case ({town[0]})")
+    sw = (exif["software"] or "").lower()
+    if any(k in sw for k in EDITING_SOFTWARE):
+        conflicts.append(f"Editing-software tag ({exif['software']}) does not fit a phone camera or screenshot source")
+    cap, up = parse_iso(exif["capture_time"]), parse_iso(f.get("uploaded_at"))
+    if cap and up and cap > up:
+        conflicts.append("Capture time is later than the upload time")
+    return {"status": "Conflict" if conflicts else "Available", "fields": fields, "geo": geo, "conflicts": conflicts,
+            "capture_time": exif["capture_time"], "gps": exif["gps"], "device": fields.get("Device")}
+
+
+def run(case_id: str) -> str:
     db = get_db()
     case = db.cases.find_one({"id": case_id}) or {}
-    files = list(db.files.find({"case_id": case_id, "kind": "media", "metadata": None}))
-
-    for file_record in files:
-        file_path = os.path.join(settings.evidence_dir, file_record["sha256"])
-        if not os.path.exists(file_path):
+    for f in db.files.find({"case_id": case_id, "status": "accepted"}):
+        if f.get("meta") is not None:
             continue
-
-        exif = extract_exif(file_path)
-        conflicts = flag_conflicts(exif, case, file_record.get("uploaded_at") or datetime.utcnow())
-        geo = geocode_nearest_town(exif["gps"]["lat"], exif["gps"]["lon"]) if exif.get("gps") else None
-
-        metadata = {
-            "capture_time": exif["capture_time"],
-            "make": exif["make"] or "Not available",
-            "model": exif["model"] or "Not available",
-            "software": exif["software"] or "Not available",
-            "gps": exif["gps"],
-            "geo": geo,
-            "conflict": conflicts[0] if conflicts else None,
-            "conflicts": conflicts,
-        }
-        db.files.update_one({"id": file_record["id"]}, {"$set": {"metadata": metadata}})
+        if f.get("sniff") in ("jpg", "png", "webp"):
+            meta = analyse(f, case)
+        elif f.get("sniff") == "pdf":
+            meta = {"status": "Not available", "fields": {}, "geo": None, "conflicts": [],
+                    "why": "PDF document properties are not read in v1."}
+        else:
+            meta = {"status": "Not available", "fields": {}, "geo": None, "conflicts": [],
+                    "why": "This file type carries no camera metadata."}
+        db.files.update_one({"id": f["id"]}, {"$set": {"meta": meta}})
+    files = list(db.files.find({"case_id": case_id, "status": "accepted"}, {"meta.status": 1}))
+    count = lambda s: sum(1 for f in files if (f.get("meta") or {}).get("status") == s)  # noqa: E731
+    return f"{count('Available')} with metadata, {count('Not available')} not available, {count('Conflict')} conflict"
