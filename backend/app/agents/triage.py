@@ -1,9 +1,15 @@
-"""Content Triage Agent — deterministic, owned by G.
-docs/HACKATHON_PLAN.md §6.1.
+"""Content Triage Agent — deterministic. docs/HACKATHON_PLAN.md §6.1.
 
-Fixed output wording only: "No screening concern" | "Recommend forensic review"
-| "Not screened" — always with the limitations line. Never use the words fake,
-forged, authentic or synthetic anywhere in the UI-facing text.
+- Classify each file by magic bytes + filename into: financial record,
+  conversation, media, call log, audio, other.
+- pHash images; Hamming distance <= 6 is a duplicate group, earliest upload canonical.
+- DFT spectrum peaks on the noise residual + a JPEG quality estimate give a
+  screening score in [0, 1]; >= 0.5 means "Recommend forensic review".
+  Threshold calibrated on the demo bundle only — say so on stage.
+
+Fixed output wording: "No screening concern" | "Recommend forensic review" |
+"Not screened", always shown with the limitations line. Never fake/forged/
+authentic/synthetic.
 """
 import os
 
@@ -12,162 +18,175 @@ import imagehash
 import numpy as np
 from PIL import Image
 
+from app.config import settings
 from app.db import get_db
 
-IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
-LIMITATION_TEXT = (
-    "Frequency analysis catches crude tampering and misses sophisticated forgery."
-)
+LIMITATION_TEXT = "Screening detects some crude edits and misses sophisticated ones. It is a referral aid, not a finding."
 DUPLICATE_HAMMING_THRESHOLD = 6
-SCREENING_SCORE_THRESHOLD = 0.5
+SCREENING_THRESHOLD = 0.5
+IMAGE_SNIFF = {"jpg", "png", "webp"}
+AUDIO_SNIFF = {"wav", "mp3", "ogg", "m4a"}
+BANK_MARKERS = ("debited", "credited", "a/c", "upi", "avl bal", "available balance", "imps", "neft", "rtgs")
 
 
-def classify_file(file_record: dict, sample_text: str = "") -> str:
-    """Filename extension + a content sniff for .txt files (chat export vs bank SMS)."""
-    name = (file_record.get("name") or "").lower()
-    ext = os.path.splitext(name)[1]
-
-    if ext in IMAGE_EXTENSIONS:
+def classify(f: dict, sample_text: str) -> str:
+    name, sniff = f["name"].lower(), f.get("sniff")
+    if sniff in IMAGE_SNIFF or sniff == "heic":
         return "media"
-    if ext in {".wav", ".mp3", ".m4a"}:
+    if sniff in AUDIO_SNIFF:
         return "audio"
-    if ext == ".csv":
+    if "call" in name and f["ext"] in (".csv", ".txt"):
         return "call_log"
-    if ext == ".pdf":
+    if sniff == "pdf":
         return "financial_record"
-    if ext == ".txt":
-        lowered = sample_text.lower()
-        bank_markers = ("debited", "credited", "a/c", "upi ref", "avl bal", "imps", "neft")
-        if any(marker in lowered for marker in bank_markers):
+    if f["ext"] in (".txt", ".csv"):
+        low = sample_text.lower()
+        if any(m in low for m in BANK_MARKERS) or any(k in name for k in ("bank", "sms", "statement", "upi", "txn")):
             return "financial_record"
-        return "conversation"
+        if any(k in name for k in ("chat", "whatsapp", "telegram", "message")) or " - " in sample_text or "] " in sample_text:
+            return "conversation"
     return "other"
 
 
-def compute_phash(image_path: str) -> str | None:
+def detect_language(text: str) -> str:
+    if not text:
+        return "—"
+    ml = sum(1 for ch in text if "ഀ" <= ch <= "ൿ")
+    latin = sum(1 for ch in text if ch.isascii() and ch.isalpha())
+    if ml and latin > ml * 0.3:
+        return "Malayalam + English"
+    return "Malayalam" if ml else "English"
+
+
+def jpeg_quality(img: Image.Image) -> int | None:
+    """Estimate JPEG quality from the luminance quantisation table (libjpeg scaling)."""
+    quant = getattr(img, "quantization", None)
+    if not quant or 0 not in quant:
+        return None
+    q0 = list(quant[0])
+    std = [16, 11, 10, 16, 24, 40, 51, 61, 12, 12, 14, 19, 26, 58, 60, 55, 14, 13, 16, 24, 40, 57, 69, 56,
+           14, 17, 22, 29, 51, 87, 80, 62, 18, 22, 37, 56, 68, 109, 103, 77, 24, 35, 55, 64, 81, 104, 113, 92,
+           49, 64, 78, 87, 103, 121, 120, 101, 72, 92, 95, 98, 112, 100, 103, 99]
+    scale = float(np.mean([q / s for q, s in zip(sorted(q0), sorted(std))])) * 100
+    return int(max(1, min(100, (200 - scale) / 2 if scale <= 100 else 5000 / scale)))
+
+
+def periodic_peak_score(gray: np.ndarray) -> float:
+    """Resampling and splicing leave periodic correlations in the noise residual,
+    which show up as isolated strong peaks in its Fourier spectrum."""
+    h, w = gray.shape
+    if min(h, w) < 64:
+        return 0.0
+    g = gray.astype(np.float32)
+    residual = g - cv2.GaussianBlur(g, (3, 3), 0)
+    win = np.outer(np.hanning(h), np.hanning(w)).astype(np.float32)
+    mag = np.abs(np.fft.fftshift(np.fft.fft2(residual * win)))
+    mag = np.log1p(mag)
+    local = cv2.medianBlur(mag.astype(np.float32), 5)
+    excess = mag - local
+    cy, cx = h // 2, w // 2
+    r = max(4, min(h, w) // 32)
+    excess[cy - r:cy + r, cx - r:cx + r] = 0
+    excess[cy - 1:cy + 2, :] = 0
+    excess[:, cx - 1:cx + 2] = 0
+    thr = excess.mean() + 6 * excess.std()
+    peaks = int((excess > thr).sum())
+    return float(peaks) / (h * w) * 1e4
+
+
+def screen_image(path: str) -> dict:
     try:
-        with Image.open(image_path) as img:
+        with Image.open(path) as img:
+            quality = jpeg_quality(img)
+            img.load()
+            gray = np.array(img.convert("L"))
+    except Exception:
+        return {"status": "not", "score": None, "reasons": ["The image could not be decoded for screening"]}
+
+    peak = periodic_peak_score(gray)
+    reasons = []
+    score = min(0.45, peak * 0.15)
+    if peak >= 2.0:
+        score += 0.35
+        reasons.append("Periodic peaks in the frequency spectrum, consistent with resampling or pasted regions")
+    if quality is not None and quality < 60:
+        score += 0.15
+        reasons.append(f"Low JPEG quality estimate ({quality}), consistent with repeated re-saving")
+    score = round(min(1.0, score), 2)
+    if not reasons:
+        reasons.append("No frequency-domain or compression irregularity above threshold")
+    return {"status": "review" if score >= SCREENING_THRESHOLD else "none", "score": score, "reasons": reasons,
+            "jpeg_quality": quality}
+
+
+def _phash(path: str) -> str | None:
+    try:
+        with Image.open(path) as img:
             return str(imagehash.phash(img))
     except Exception:
         return None
 
 
-def group_duplicates(files: list[dict]) -> dict[str, str]:
-    """files: media file records, each with a precomputed `_phash`. Returns
-    {file_id: canonical_file_id} for every file (including canonicals, which
-    map to themselves) so callers can set is_duplicate_of = None for canonicals.
-    """
-    ordered = sorted(
-        (f for f in files if f.get("_phash")),
-        key=lambda f: f.get("uploaded_at") or "",
-    )
-    canonical_of: dict[str, str] = {}
-    canonicals: list[tuple[str, imagehash.ImageHash]] = []
-
-    for f in ordered:
-        phash = imagehash.hex_to_hash(f["_phash"])
-        match = None
-        for canon_id, canon_hash in canonicals:
-            if phash - canon_hash <= DUPLICATE_HAMMING_THRESHOLD:
-                match = canon_id
-                break
-        if match:
-            canonical_of[f["id"]] = match
-        else:
-            canonical_of[f["id"]] = f["id"]
-            canonicals.append((f["id"], phash))
-    return canonical_of
+def evidence_path(f: dict) -> str:
+    return os.path.join(settings.evidence_dir, f["sha256"])
 
 
-def _estimate_recompression_flag(image_path: str) -> float:
-    """A coarse recompression signal: an irregular (non-monotonic) luminance
-    quantization table can indicate the file was re-saved after editing.
-    Returns 0.0 or 0.3 — a small additive signal, not a verdict on its own.
-    """
+def read_text(f: dict, limit: int | None = None) -> str:
     try:
-        with Image.open(image_path) as img:
-            quant = getattr(img, "quantization", None)
-            if not quant:
-                return 0.0
-            values = list(quant.get(0, []))
-            if values and values != sorted(values):
-                return 0.3
-    except Exception:
-        pass
-    return 0.0
+        with open(evidence_path(f), "r", encoding="utf-8", errors="ignore") as fh:
+            return fh.read(limit) if limit else fh.read()
+    except OSError:
+        return ""
 
 
-def screen_for_manipulation(image_path: str) -> dict:
-    """OpenCV DFT spectrum peak ratio + a recompression signal -> screening_score
-    in [0, 1]. score >= 0.5 => "Recommend forensic review". Threshold calibrated
-    on the demo bundle only — this is stated on stage, not hidden in the UI.
-    """
-    img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
-    if img is None:
-        return {"screening_score": 0.0, "label": "Not screened", "limitation": LIMITATION_TEXT}
-
-    spectrum = np.fft.fftshift(np.fft.fft2(img))
-    magnitude = np.log(np.abs(spectrum) + 1)
-    h, w = magnitude.shape
-    cy, cx = h // 2, w // 2
-
-    mask = np.ones_like(magnitude, dtype=bool)
-    radius = max(4, min(h, w) // 40)
-    mask[max(0, cy - radius):cy + radius, max(0, cx - radius):cx + radius] = False
-    outer = magnitude[mask]
-    if outer.size == 0:
-        peak_ratio = 0.0
-    else:
-        peak_threshold = outer.mean() + 3 * outer.std()
-        peak_ratio = float((outer > peak_threshold).sum()) / outer.size
-
-    score = min(1.0, peak_ratio * 400 + _estimate_recompression_flag(image_path))
-    label = "Recommend forensic review" if score >= SCREENING_SCORE_THRESHOLD else "No screening concern"
-    return {"screening_score": round(score, 2), "label": label, "limitation": LIMITATION_TEXT}
-
-
-def run(case_id: str) -> None:
-    """Entry point called from app.worker._run_stage('triage', case_id).
-    Classifies every unclassified accepted file, groups image duplicates by
-    pHash, and runs manipulation screening on each image.
-    """
+def run(case_id: str) -> str:
     db = get_db()
-    files = list(db.files.find({"case_id": case_id, "status": "accepted", "kind": None}))
+    files = list(db.files.find({"case_id": case_id, "status": "accepted"}).sort("uploaded_at", 1))
+    for f in files:
+        update: dict = {}
+        text = read_text(f, 4096) if f["ext"] in (".txt", ".csv") else ""
+        if not f.get("kind"):
+            update["kind"] = "audio" if f.get("narration") else classify(f, text)
+        kind = update.get("kind", f.get("kind"))
+        if kind in ("conversation", "financial_record", "call_log", "other") and f["ext"] in (".txt", ".csv"):
+            update["lang"] = detect_language(read_text(f))
+        elif kind == "audio":
+            update["lang"] = "Malayalam" if f.get("narration") else "—"
+        if f.get("screen") is None:
+            if f.get("sniff") in IMAGE_SNIFF:
+                update["screen"] = screen_image(evidence_path(f))
+                update["phash"] = _phash(evidence_path(f))
+            elif f.get("sniff") == "heic":
+                update["screen"] = {"status": "not", "score": None, "reasons": ["HEIC images are not screened in v1"]}
+            elif kind == "audio":
+                update["screen"] = {"status": "not", "score": None, "reasons": ["Audio is not screened in v1"]}
+            else:
+                update["screen"] = {"status": "na", "score": None, "reasons": []}
+        if update:
+            db.files.update_one({"id": f["id"]}, {"$set": update})
+            f.update(update)
 
-    classified: list[dict] = []
-    for file_record in files:
-        sample_text = ""
-        ext = os.path.splitext((file_record.get("name") or "").lower())[1]
-        file_path = os.path.join(_evidence_dir(), file_record["sha256"])
-        if ext == ".txt" and os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                sample_text = f.read(2048)
+    # Near-duplicate grouping across all images in the case, earliest upload canonical.
+    images = [f for f in files if f.get("phash")]
+    groups: list[list[dict]] = []
+    for f in images:
+        h = imagehash.hex_to_hash(f["phash"])
+        for g in groups:
+            if h - imagehash.hex_to_hash(g[0]["phash"]) <= DUPLICATE_HAMMING_THRESHOLD:
+                g.append(f)
+                break
+        else:
+            groups.append([f])
+    n = 0
+    db.files.update_many({"case_id": case_id}, {"$set": {"dup": None}})
+    for g in groups:
+        if len(g) < 2:
+            continue
+        n += 1
+        for i, f in enumerate(g):
+            db.files.update_one({"id": f["id"]}, {"$set": {"dup": {
+                "group": f"D{n}", "canonical": i == 0, "idx": i + 1, "of": len(g), "canonical_id": g[0]["ev_id"]}}})
 
-        kind = classify_file(file_record, sample_text)
-        update: dict = {"kind": kind}
-
-        if kind == "media" and ext in IMAGE_EXTENSIONS and os.path.exists(file_path):
-            file_record["_phash"] = compute_phash(file_path)
-            screening = screen_for_manipulation(file_path)
-            update["screening"] = {
-                "label": screening["label"],
-                "score": screening["screening_score"],
-                "limitation": screening["limitation"],
-            }
-
-        db.files.update_one({"id": file_record["id"]}, {"$set": update})
-        file_record.update(update)
-        classified.append(file_record)
-
-    media_files = [f for f in classified if f.get("kind") == "media" and f.get("_phash")]
-    if media_files:
-        canonical_of = group_duplicates(media_files)
-        for file_id, canonical_id in canonical_of.items():
-            is_dup_of = canonical_id if canonical_id != file_id else None
-            db.files.update_one({"id": file_id}, {"$set": {"is_duplicate_of": is_dup_of}})
-
-
-def _evidence_dir() -> str:
-    from app.config import settings
-
-    return settings.evidence_dir
+    dups = sum(len(g) - 1 for g in groups if len(g) > 1)
+    review = db.files.count_documents({"case_id": case_id, "status": "accepted", "screen.status": "review"})
+    return f"{len(files)} files classified; {dups} duplicates grouped; {review} recommended for forensic review"

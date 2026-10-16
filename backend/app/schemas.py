@@ -1,126 +1,104 @@
-"""Shared Pydantic models — the de facto schema for every MongoDB document shape.
-
-Both G (platform/deterministic agents) and V (model-touching agents) import
-these instead of writing ad hoc dicts, so the two sides of the pipeline can't
-drift apart on field names. Matches the collections in app/db.py and the
-contracts in contracts/*.json.
-"""
-from datetime import datetime
+"""Shared Pydantic models — the de facto schema for MongoDB documents
+(docs/HACKATHON_PLAN.md §5). Write sites call `checked(Model, doc)` so a shape
+drift between agents fails loudly at the write, not silently in the UI."""
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 
 
-class Case(BaseModel):
+class _Doc(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+
+class Complainant(_Doc):
+    name: str
+    contact: str = ""
+    address: str = ""
+    language: str
+    consent_at: str | None
+    consent_version: str | None
+
+
+class Case(_Doc):
     id: str
-    complainant_name: str
-    complainant_contact: str | None = None
-    consent_given: bool
-    location: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    status: Literal["intake", "analyzing", "review", "approved", "exported"] = "intake"
+    ref: str
+    status: Literal["draft", "analysing", "review", "approved", "exported"]
+    created_by: str
+    created_at: str
+    complainant: Complainant
+    analysis: dict
+    approval: dict
 
 
-class FileRecord(BaseModel):
+class FileRecord(_Doc):
     id: str
     case_id: str
     name: str
+    ext: str
+    size: int
     sha256: str
-    mime_type: str
-    size_bytes: int
     status: Literal["accepted", "rejected"]
-    reason: str | None = None
-    kind: Literal[
-        "financial_record", "conversation", "media", "call_log", "audio", "other"
-    ] | None = None
-    is_duplicate_of: str | None = None  # file id of the canonical copy, if deduped
-    screening: dict | None = None  # {label, score, limitation} — Content Triage output
-    metadata: dict | None = None  # {capture_time, make, model, software, gps, conflict} — Metadata agent output
-    uploaded_at: datetime = Field(default_factory=datetime.utcnow)
+    ev_id: str | None
+    uploaded_at: str
+    uploaded_by: str
 
 
-class Narration(BaseModel):
+class Source(_Doc):
+    f: str | None = None
+    l: int | None = None  # noqa: E741 - matches the UI's {f, l} / {n} source refs
+    n: int | None = None
+
+
+class TimelineEvent(_Doc):
     id: str
     case_id: str
-    file_id: str
-    malayalam_text: str
-    malayalam_segments: list[dict] = Field(default_factory=list)
-    english_text: str
-    english_segments: list[dict] = Field(default_factory=list)
-    corrected_by: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    at: str
+    prec: Literal["exact", "day", "approx"]
+    type: Literal["Call", "Message", "Transaction", "Media"]
+    actor: str
+    action: str
+    amount: float | None
+    conf: float
+    src: list[Source]
+    source_kinds: list[str]
 
 
-class AuditEntry(BaseModel):
-    """One block in the append-only custody chain. Ordered by insertion."""
-
-    id: str
-    case_id: str
-    entry_type: Literal["FILE_RECEIVED", "ARTIFACT_DERIVED", "OFFICER_ACTION"]
-    payload: dict
-    prev_hash: str | None
-    entry_hash: str
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-class RunStep(BaseModel):
-    name: Literal["triage", "metadata", "asr", "timeline", "gaps", "draft", "bns"]
-    state: Literal["waiting", "running", "done", "failed", "skipped"] = "waiting"
-    note: str | None = None
-
-
-class Run(BaseModel):
-    id: str
-    case_id: str
-    state: Literal["queued", "running", "done", "failed"] = "queued"
-    steps: list[RunStep]
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-class TimelineEvent(BaseModel):
-    id: str
-    case_id: str
-    timestamp: str  # ISO string; precision noted separately
-    timestamp_precision: Literal["exact", "date_only", "approximate"]
-    summary: str
-    amount: float | None = None
-    account: str | None = None
-    source_file_ids: list[str]
-    source_refs: list[dict] = Field(default_factory=list)  # [{file_id, line/segment}]
-    source_kinds: list[str] = Field(default_factory=list)  # e.g. "financial_record", "narration", "call_log"
-
-
-class Gap(BaseModel):
+class Gap(_Doc):
     id: str
     case_id: str
     rule: Literal["G-01", "G-02", "G-03", "G-05", "G-07", "G-09"]
-    question: str  # rendered from the fixed neutral template
-    status: Literal["open", "answered", "dismissed"] = "open"
-    answer: str | None = None
-    dismiss_reason: str | None = None
-    related_event_ids: list[str] = Field(default_factory=list)
+    key: str
+    sev: Literal["High", "Medium", "Low"]
+    q: str
+    src: list[Source]
+    status: Literal["open", "answered", "dismissed"]
 
 
-class DraftSentence(BaseModel):
-    sentence: str
-    event_ids: list[str] = Field(default_factory=list)
-    supported: bool  # false => rendered as "Unsupported — needs officer review"
+class Sentence(_Doc):
+    t: str
+    event_ids: list[str]
+    src: list[Source]
+    supported: bool | None
 
 
-class Draft(BaseModel):
+class DraftVersion(_Doc):
+    case_id: str
+    v: int
+    by: str
+    at: str
+    edited: bool
+    fields: dict
+    narrative: str
+    sentences: list[Sentence]
+
+
+class Run(_Doc):
     id: str
     case_id: str
-    version: int
-    sentences: list[DraftSentence]
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    state: Literal["queued", "running", "done", "failed"]
+    steps: list[dict]
 
 
-class BnsSuggestion(BaseModel):
-    id: str
-    case_id: str
-    section: str
-    title: str
-    ingredients: list[str]
-    matched_event_ids: list[str]
-    decision: Literal["pending", "accepted", "rejected"] = "pending"
-    source: Literal["fixture", "live"] = "fixture"
+def checked(model: type[BaseModel], doc: dict) -> dict:
+    model.model_validate(doc)
+    return doc

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{{ case.ref }} FIR draft v{{ ex.v }}</title>
+<style>
+body{font:13px/1.5 system-ui,"Nirmala UI","Noto Sans Malayalam",sans-serif;margin:24px;color:#000}
+h1{font-size:18px}h2{font-size:15px;margin-top:18px}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:5px;text-align:left;vertical-align:top}
+th{width:28%}.mono{font-family:Consolas,monospace;font-size:11px;word-break:break-all}
+.qr{float:right;text-align:center;font-size:10px;width:180px}.flag{color:#b42318;font-weight:600}
+.ml{font-size:14px}@media print{button{display:none}}
+</style></head><body>
+<div class="qr"><img src="data:image/png;base64,{{ qr }}" width="150" height="150" alt="Verification QR code"><div>Scan to verify</div></div>
+<h1>First Information Report: draft for filing</h1>
+<p>{{ station }} · TRACE case {{ case.ref }} · export v{{ ex.v }} · draft v{{ draft.v }} approved by {{ case.approval.by }} on {{ approved_at }}</p>
+<table>
+<tr><th>Complainant</th><td>{{ case.complainant.name }}, {{ case.complainant.address }}, {{ case.complainant.contact }}</td></tr>
+<tr><th>Place of occurrence</th><td>{{ draft.fields.place }}</td></tr>
+<tr><th>Date and time of occurrence</th><td>{{ draft.fields.period }}</td></tr>
+<tr><th>Date of report</th><td>{{ draft.fields.report_date }}</td></tr>
+<tr><th>Reason for delay</th><td>{{ draft.fields.delay_reason or "Not recorded" }}</td></tr>
+<tr><th>Sections (accepted by SHO, advisory)</th><td>{% for b in bns %}{{ b.section }} {{ b.title }}{% if not loop.last %}; {% endif %}{% else %}None{% endfor %}<br><small>Advisory — sections to be verified</small></td></tr>
+</table>
+<h2>Narrative</h2>
+<p>{% for s in draft.sentences %}{{ s.t }}{% if s.supported == false %} <span class="flag">[Unsupported — needs officer review]</span>{% endif %} {% else %}{{ draft.narrative }}{% endfor %}</p>
+{% if ml_segments %}
+<h2>Annex: complainant's statement in Malayalam (original, machine transcription)</h2>
+<p class="ml">{% for s in ml_segments %}{{ s.ml }} {% endfor %}</p>
+{% endif %}
+<h2>Evidence manifest</h2>
+<table><tr><th style="width:auto">ID</th><th style="width:auto">File</th><th style="width:auto">SHA-256</th></tr>
+{% for f in files %}<tr><td>{{ f.ev_id }}</td><td>{{ f.name }}</td><td class="mono">{{ f.sha256 }}</td></tr>{% endfor %}
+</table>
+<p class="mono">Audit chain head: {{ ex.head }}<br>Verify: {{ verify_url }}</p>
+<p style="font-size:11px">Prepared with TRACE. TRACE does not file FIRs; the officer files through the official channel.</p>
+<button onclick="print()">Print / save as PDF</button>
+</body></html>

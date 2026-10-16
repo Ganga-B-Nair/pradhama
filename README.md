@@ -1,13 +1,35 @@
 ## Initial README for TRACE by PRADHAMA
 
+## Running it
+
+Requirements: Docker Desktop, and [Ollama](https://ollama.com) running on the host with the plan's CPU model:
+
+```
+ollama pull qwen2.5:3b-instruct
+docker compose up -d --build
+```
+
+Open http://localhost:3000 and sign in as **Officer** (`officer` / `officer123`) or **SHO** (`sho` / `sho123`).
+
+- Demo bundle (fictional): `golden/bundle/` — upload everything except `narration_ml.mp3` under Evidence, and the `.mp3` under Narration. `golden/followup/bank_sms_02oct.txt` is the "missing receipt" that closes G-01/G-09 on re-check.
+- Regenerate it with `python backend/scripts/make_golden.py --audio` (needs `pillow piexif gTTS`).
+- QR codes from a phone: set `PUBLIC_BASE_URL=http://<laptop LAN IP>:3000` before `docker compose up`.
+- `DEMO_CACHE=1` (default in compose) reuses the last good speech-to-text / LLM output if a model step fails (§9).
+- Golden test: `docker compose run --rm -v "$PWD/golden:/golden" backend pytest -q` (uses a separate `trace_test` database).
+- Pre-pull the Whisper `small` model (~480 MB, once, kept in the `whisper_models` volume) before the demo — otherwise the first narration spends its time limit downloading it:
+  `docker compose exec backend python -c "from faster_whisper import WhisperModel; WhisperModel('small', device='cpu', compute_type='int8')"`
+
+Without Ollama the pipeline still completes: narration is read by rules and the draft is written from templates, and the Analysis screen says so.
+
 ## Repo layout
 
 - `docs/HACKATHON_PLAN.md` — the current build plan (architecture, tech stack, task split, schedule, risk register) for the 20-hour hackathon build. **Read this first.**
 - `docs/PRD.md` / `docs/TRD.md` / `docs/SRS.md` / `docs/README.md` — the full 9-month pilot requirements the hackathon plan scopes down from.
-- `backend/` — FastAPI app (MongoDB + Neo4j, the 4-agent pipeline, custody chain, export).
-- `frontend/` — Next.js 14 app.
-- `contracts/` — frozen JSON response shapes, also used as the frontend's mock data.
-- `docker-compose.yml` — MongoDB + Neo4j containers (Ollama and the ASR subprocess stay native; see the plan for why).
+- `backend/` — FastAPI app: MongoDB + Neo4j, the agent pipeline (`app/agents`, LangGraph in `app/worker.py`), custody chain (`app/custody.py`), export and verify. Document shapes live in `app/schemas.py`.
+- `frontend/` — Next.js 14 app; screens follow `trace_ui_demo.html` and use its styling. `/api/*` is proxied to the backend.
+- `golden/` — synthetic demo bundle and `expected.json` for the golden test.
+- `contracts/` — the original H1 contract drafts (the live shapes are in `backend/app/schemas.py`).
+- `docker-compose.yml` — MongoDB, Neo4j, backend and frontend. Ollama stays native on the host (see the plan for why).
 
 ## Form answers
 

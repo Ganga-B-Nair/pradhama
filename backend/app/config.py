@@ -1,4 +1,5 @@
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,23 +15,28 @@ class Settings:
 
     ollama_host: str = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5:3b-instruct")
+    ollama_timeout_seconds: float = float(os.getenv("OLLAMA_TIMEOUT_SECONDS", "180"))
 
     asr_model_size: str = os.getenv("ASR_MODEL_SIZE", "small")
     asr_device: str = os.getenv("ASR_DEVICE", "cpu")
+    asr_timeout_seconds: int = int(os.getenv("ASR_TIMEOUT_SECONDS", "900"))
 
     bns_mode: str = os.getenv("BNS_MODE", "fixture")  # "fixture" | "live"
     insightlaw_base_url: str = os.getenv("INSIGHTLAW_BASE_URL", "https://insightlaw.in")
     insightlaw_timeout_seconds: float = float(os.getenv("INSIGHTLAW_TIMEOUT_SECONDS", "5"))
 
     evidence_dir: str = os.getenv("EVIDENCE_DIR", "../evidence")
-    # PUBLIC_BASE_URL: the frontend's LAN-reachable origin. Used only for the QR
-    # verification link, since /verify is a frontend page (frontend/app/verify).
+    cache_dir: str = os.getenv("CACHE_DIR", "../cache")
+    # PUBLIC_BASE_URL: the frontend's LAN-reachable origin, encoded in the QR
+    # code. A phone can't reach `localhost`, so set it to http://<LAN IP>:3000
+    # before the demo (docs/HACKATHON_PLAN.md §6.6).
     public_base_url: str = os.getenv("PUBLIC_BASE_URL", "http://localhost:3000")
-    # API_PUBLIC_BASE_URL: this backend's own LAN-reachable origin. Used for the
-    # export HTML/JSON/certificate links, which are served directly by FastAPI
-    # (Jinja2 + qrcode) so printing works with no frontend export page required.
-    api_public_base_url: str = os.getenv("API_PUBLIC_BASE_URL", "http://localhost:8000")
+    # Golden-run cache (§9): when a model stage fails, reuse its last good output.
     demo_cache: bool = os.getenv("DEMO_CACHE", "0") == "1"
+    code_version: str = os.getenv("CODE_VERSION", "dev")
+
+    station_code: str = os.getenv("STATION_CODE", "KCPS")
+    station_name: str = os.getenv("STATION_NAME", "Cyber Police Station, Kochi City")
 
 
 settings = Settings()

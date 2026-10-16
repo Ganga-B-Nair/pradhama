@@ -1,63 +1,61 @@
 """Neo4j: Gap Hunter's graph. Always a derived view, never the source of truth.
 
-Every run, the worker deletes the current case's subgraph and rewrites it from
-MongoDB documents before running any Cypher rule. This is what avoids dual-write
-drift: a crash mid-rebuild just means the next run rebuilds again from Mongo,
-never a half-written graph feeding a live query (see docs/HACKATHON_PLAN.md §6.4).
-
-If Neo4j is unreachable, callers should catch ServiceUnavailable and fall back
-to the in-memory rule evaluation path (see agents/gaps.py) rather than failing
-the whole pipeline run.
+Every Gap Hunter run deletes the case's subgraph and rewrites it from MongoDB
+before any Cypher rule runs. A crash mid-rebuild just means the next run
+rebuilds again — a half-written graph never feeds a live query
+(docs/HACKATHON_PLAN.md §6.4).
 """
+import time
+
 from neo4j import GraphDatabase
 
 from app.config import settings
 
 _driver = None
+_last_check = (0.0, False)
 
 
 def get_driver():
     global _driver
     if _driver is None:
-        _driver = GraphDatabase.driver(
-            settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_password)
-        )
+        _driver = GraphDatabase.driver(settings.neo4j_uri, auth=(settings.neo4j_user, settings.neo4j_password),
+                                       connection_timeout=3)
     return _driver
 
 
-def rebuild_case_subgraph(case_id: str, nodes: list[dict], edges: list[dict]) -> None:
-    """Wipe and rewrite one case's subgraph from normalized Mongo data.
+def neo4j_available() -> bool:
+    global _last_check
+    if time.time() - _last_check[0] < 15:
+        return _last_check[1]
+    try:
+        get_driver().verify_connectivity()
+        ok = True
+    except Exception:  # noqa: BLE001
+        ok = False
+    _last_check = (time.time(), ok)
+    return ok
 
-    nodes: [{"id": str, "label": str, "props": dict}]
-    edges: [{"from": str, "to": str, "type": str, "props": dict}]
-    Generic/high-degree entities (e.g. a shared bank branch code) should already
-    be tagged `high_degree: true` in props by the caller, before they reach here.
-    """
-    driver = get_driver()
-    with driver.session() as session:
-        session.run("MATCH (n {case_id: $case_id}) DETACH DELETE n", case_id=case_id)
-        for node in nodes:
-            session.run(
-                f"CREATE (n:{node['label']} $props)",
-                props={**node["props"], "id": node["id"], "case_id": case_id},
-            )
-        for edge in edges:
-            session.run(
-                f"""
-                MATCH (a {{id: $from_id, case_id: $case_id}})
-                MATCH (b {{id: $to_id, case_id: $case_id}})
-                CREATE (a)-[r:{edge['type']} $props]->(b)
-                """,
-                from_id=edge["from"],
-                to_id=edge["to"],
-                case_id=case_id,
-                props=edge.get("props", {}),
-            )
+
+def rebuild_case_subgraph(case_id: str, g) -> None:
+    """Wipe and rewrite one case's subgraph from the in-memory Graph built from Mongo."""
+    by_labels: dict[tuple, list] = {}
+    for nid, n in g.nodes.items():
+        props = {k: v for k, v in n.items() if k != "labels" and v is not None}
+        by_labels.setdefault(tuple(n["labels"]), []).append({**props, "nid": nid, "case_id": case_id})
+    by_type: dict[str, list] = {}
+    for a, t, b in g.edges:
+        by_type.setdefault(t, []).append({"a": a, "b": b})
+    with get_driver().session() as s:
+        s.run("MATCH (n {case_id: $cid}) DETACH DELETE n", cid=case_id)
+        for labels, rows in by_labels.items():
+            s.run(f"UNWIND $rows AS r CREATE (n:{':'.join(labels)}) SET n = r", rows=rows)
+        for t, rows in by_type.items():
+            s.run(f"""UNWIND $rows AS r
+                      MATCH (a {{case_id: $cid, nid: r.a}}) MATCH (b {{case_id: $cid, nid: r.b}})
+                      CREATE (a)-[:{t}]->(b)""", rows=rows, cid=case_id)
 
 
 def run_cypher(query: str, **params):
-    """Run a bounded Cypher query. Callers must keep traversals to <=3 hops and
-    exclude nodes tagged high_degree, per docs/HACKATHON_PLAN.md §6.4."""
-    driver = get_driver()
-    with driver.session() as session:
-        return list(session.run(query, **params))
+    """Bounded queries only: <= 3 hops, high_degree nodes excluded (§6.4)."""
+    with get_driver().session() as s:
+        return list(s.run(query, **params))
