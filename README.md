@@ -26,7 +26,9 @@ Without Ollama the pipeline still completes: narration is read by rules and the 
 - `docs/HACKATHON_PLAN.md` — the current build plan (architecture, tech stack, task split, schedule, risk register) for the 20-hour hackathon build. **Read this first.**
 - `docs/PRD.md` / `docs/TRD.md` / `docs/SRS.md` / `docs/README.md` — the full 9-month pilot requirements the hackathon plan scopes down from.
 - `backend/` — FastAPI app: MongoDB + Neo4j, the agent pipeline (`app/agents`, LangGraph in `app/worker.py`), custody chain (`app/custody.py`), export and verify. Document shapes live in `app/schemas.py`.
-- `frontend/` — Next.js 14 app; screens follow `trace_ui_demo.html` and use its styling. `/api/*` is proxied to the backend.
+- `frontend/` — Next.js 14 app; screens follow `trace_ui_demo.html`. `/api/*` is proxied to the backend.
+- `docs/UI_DESIGN.md` — design tokens (black and white, red for warnings; Times New Roman and Inter; spacing), bundled fonts including Malayalam, contrast ratios, and the rule that colour never carries meaning alone.
+- `samples/demo/` — demo evidence for evaluation: three fraud scenarios, each with a WhatsApp chat, bank SMS alerts and an IP trace report (see its README).
 - `contracts/` — the original H1 contract drafts (the live shapes are in `backend/app/schemas.py`).
 - `docker-compose.yml` — MongoDB, Neo4j, backend and frontend. Ollama stays native on the host (see the plan for why).
 
