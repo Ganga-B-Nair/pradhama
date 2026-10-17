@@ -38,6 +38,8 @@ def classify(f: dict, lines: list[str] | None) -> str:
     if not lines:
         return "financial_record" if sniff == "pdf" or any(k in name for k in ("statement", "bank", "passbook")) else "other"
     head = lines[:300]
+    if parsers.parse_ip_traces({"ev_id": ""}, head, 2000):
+        return "ip_trace"  # rows with an IP address and a PIN code
     if sum(1 for ln in head if (m := parsers.WA_HEAD.match(ln.strip())) and ": " in m.group("rest")) >= 2:
         return "conversation"
     if f["ext"] == ".csv":

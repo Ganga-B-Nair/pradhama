@@ -431,3 +431,45 @@ def parse_ocr(f: dict, lines: list[str], default_year: int) -> list[dict]:
 
 def looks_like_statement(lines: list[str]) -> bool:
     return sum(1 for ln in lines if ROW_START.match(ln) and len(STMT_AMOUNT.findall(ln)) >= 2) >= 2
+
+
+# ------------------------------------------------------------- IP trace reports
+
+IPV4 = re.compile(r"(?<![\d.])((?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3})(?![\d.])")
+IPV6 = re.compile(r"(?<![0-9A-Fa-f:])((?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f]{1,4})(?![0-9A-Fa-f:])")
+PIN = re.compile(r"(?<![\d.:])([1-8]\d{5})(?![\d.:])")
+
+
+def parse_ip_traces(f: dict, lines: list[str], default_year: int) -> list[dict]:
+    """Rows of an IP trace report (ISP / CERT-In / intermediary reply): each row
+    with an IP address and a 6-digit PIN code. Columns are read from a header
+    row when the report has one (IP | Date/Time | ISP | PIN | Area); otherwise
+    the fields are picked out of the row text."""
+    order = _order_from_text(lines)
+    header = None
+    rows = []
+    for no, raw in enumerate(lines, start=1):
+        line = raw.strip()
+        cells = [c.strip() for c in re.split(r"\s*\|\s*|\t", line)] if ("|" in line or "\t" in line) else None
+        low = line.lower()
+        if cells and "ip" in low and ("pin" in low or "postal" in low):
+            header = [c.lower() for c in cells]
+            continue
+        ip = IPV4.search(line) or IPV6.search(line)
+        if not ip:
+            continue
+        rest = line[:ip.start()] + " " + line[ip.end():]
+        pin = PIN.search(re.sub(r"\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}|\d{1,2}:\d{2}(:\d{2})?", " ", rest))
+        if not pin:
+            continue
+        col = {}
+        if header and cells and len(cells) == len(header):
+            for name, val in zip(header, cells):
+                if "isp" in name or "provider" in name:
+                    col["isp"] = val
+                elif any(k in name for k in ("area", "location", "locality", "address", "city")):
+                    col["area"] = val
+        st = dates.stamp(rest, default_year, order)
+        rows.append({"ip": ip.group(1), "pin": pin.group(1), "at": st[0] if st else None, "prec": st[1] if st else None,
+                     "isp": col.get("isp"), "area": col.get("area"), "src": {"f": f["ev_id"], "l": no}})
+    return rows

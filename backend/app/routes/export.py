@@ -32,7 +32,7 @@ KINDS = {"pdf": "FIR draft (print / save as PDF, with QR code)", "json": "FIR dr
          "manifest": "Evidence manifest (CSV)", "referrals": "Forensic referral sheet (CSV)",
          "bsa": "BSA s.63 certificate helper (pre-filled hashes)"}
 SCREEN_TXT = {"none": "No screening concern", "review": "Recommend forensic review", "not": "Not screened", "na": "Not applicable"}
-KIND_LABEL = {"financial_record": "Financial record", "conversation": "Conversation", "media": "Media", "call_log": "Call log",
+KIND_LABEL = {"financial_record": "Financial record", "ip_trace": "IP trace report", "conversation": "Conversation", "media": "Media", "call_log": "Call log",
               "audio": "Audio", "other": "Other"}
 
 
