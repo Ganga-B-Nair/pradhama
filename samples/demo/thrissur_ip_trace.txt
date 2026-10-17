@@ -1,0 +1,11 @@
+IP ADDRESS TRACE REPORT
+Reply to police requisition (BNSS s.94 / IT Act s.79) - demo data for TRACE
+Requesting station: Cyber Police Station, Kochi City
+Responding intermediary: Demo Mobile Ltd
+
+IP Address | Date/Time (IST) | ISP | PIN Code | Area
+192.0.2.77 | 07-10-2026 18:14 | Demo Mobile | 680001 | Thrissur Round
+192.0.2.77 | 07-10-2026 18:39 | Demo Mobile | 680001 | Thrissur Round
+198.51.100.203 | 08-10-2026 11:04 | Demo Broadband | 680020 | Kuriachira, Thrissur
+
+Note: IP addresses are from documentation ranges (RFC 5737) and do not identify any person.
