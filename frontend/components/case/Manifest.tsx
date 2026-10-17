@@ -70,11 +70,15 @@ function FileDetail({ f, limitation, onClose }: { f: any; limitation: string; on
   const [d, setD] = useState<any>(null);
   useEffect(() => { api.get(`/cases/${c.id}/files/${f.ev_id}/view`).then(setD); }, [c.id, f.ev_id]);
   const raw = `/api/cases/${c.id}/files/${f.ev_id}/raw`;
-  const preview = d?.lines ? (
-    <div className="lines">{d.lines.map((t: string, i: number) => <div key={i}><span>{i + 1}</span>{t}</div>)}</div>
-  ) : ["jpg", "png", "webp"].includes(f.sniff) ? <img alt={f.name} style={{ maxWidth: "100%", maxHeight: 260 }} src={raw} />
-    : ["wav", "mp3", "ogg", "m4a", "webm"].includes(f.sniff) ? <audio controls src={raw} style={{ width: "100%" }} />
-    : <p className="muted">No preview for this file type.</p>;
+  const isImg = ["jpg", "png", "webp"].includes(f.sniff), isAudio = ["wav", "mp3", "ogg", "m4a", "webm"].includes(f.sniff);
+  const preview = <>
+    {isImg && <img alt={f.name} style={{ maxWidth: "100%", maxHeight: 260 }} src={raw} />}
+    {isAudio && <audio controls src={raw} style={{ width: "100%" }} />}
+    {d?.lines?.length ? <>
+      {isImg && <p className="small muted">Text read from the image (OCR, may contain errors):</p>}
+      <div className="lines">{d.lines.map((t: string, i: number) => <div key={i}><span>{i + 1}</span>{t}</div>)}</div>
+    </> : !isImg && !isAudio && <p className="muted">{d ? "No readable text in this file (a scanned PDF needs to be uploaded as images)." : "Loading…"}</p>}
+  </>;
   return (
     <div className="box" id="detail">
       <div className="row" style={{ justifyContent: "space-between" }}>

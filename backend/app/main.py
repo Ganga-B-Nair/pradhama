@@ -5,10 +5,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import ensure_indexes
-from app.routes import analysis, auth, cases, export, files
+from app.routes import analysis, auth, cases, export, files, jurisdiction
 from app.worker import job_queue, resume_interrupted, worker_loop
 
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)  # "unknown label" notices on a fresh graph
 app = FastAPI(title="TRACE API")
 
 # The UI normally reaches the API through the Next.js /api proxy (same origin).
@@ -23,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for router in [auth.router, cases.router, files.router, analysis.router, export.router]:
+for router in [auth.router, cases.router, files.router, analysis.router, export.router, jurisdiction.router]:
     app.include_router(router)
 
 

@@ -52,8 +52,10 @@ export default function Gaps() {
         const type = r.mimeType || "audio/webm";
         const fd = new FormData();
         fd.append("files", new Blob(chunks, { type }), `gap_${id}_voice_answer.${type.includes("ogg") ? "ogg" : "webm"}`);
-        const [saved] = await api.upload(`/cases/${c.id}/files`, fd);
-        setGap(id, "answered", `Voice answer recorded as ${saved.ev_id || "evidence"} (sha256 ${String(saved.sha256).slice(0, 12)}…).`, true);
+        try {
+          const [saved] = await api.upload(`/cases/${c.id}/files`, fd);
+          setGap(id, "answered", `Voice answer recorded as ${saved.ev_id || "evidence"} (sha256 ${String(saved.sha256).slice(0, 12)}…).`, true);
+        } catch (e: any) { setErr(e.message); alert(e.message); }
       };
       r.start();
       setRec({ id, r });

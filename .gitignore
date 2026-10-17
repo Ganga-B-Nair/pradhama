@@ -10,8 +10,6 @@ frontend/.next/
 frontend/.env.local
 
 # Data / runtime
-evidence/*
-!evidence/.gitkeep
 cache/*
 !cache/.gitkeep
 
@@ -20,3 +18,4 @@ cache/*
 Thumbs.db
 frontend/tsconfig.tsbuildinfo
 frontend/next-env.d.ts
+.env

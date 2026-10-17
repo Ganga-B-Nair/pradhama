@@ -10,6 +10,8 @@ Traversals stay within 3 hops and skip nodes tagged high_degree (> 20 links).
 If Neo4j is unreachable the same 6 rules run on an in-memory copy of the
 graph, so Gap Hunter degrades instead of blocking the pipeline.
 """
+import threading
+from collections import defaultdict
 from dataclasses import dataclass, field
 
 from app import custody
@@ -108,7 +110,9 @@ def build_graph(case_id: str) -> Graph:
         labels = ["Event", "Transaction"] if e["type"] == "Transaction" else ["Event"]
         day = parse_iso(e["at"]).astimezone(IST).date().isoformat() if e["prec"] != "approx" else None
         eid = g.node(f"event:{e['id']}", labels, eid=e["id"], type=e["type"], at=e["at"], amount=e.get("amount"),
-                     day=day, narration_only=e["source_kinds"] == ["narration"])
+                     day=day, narration_only=e["source_kinds"] == ["narration"],
+                     # a debit backed by a bank record or a payment screenshot
+                     recorded=bool(set(e.get("kinds", [])) & {"debit"}) and bool(set(e["source_kinds"]) & {"financial_record", "screenshot"}))
         for s in e["src"]:
             if s.get("f") and s["f"] in files:
                 g.edge(eid, "EVIDENCED_BY", f"file:{s['f']}")
@@ -147,8 +151,8 @@ def build_graph(case_id: str) -> Graph:
 CYPHER = {
     "G-01": """
         MATCH (e:Transaction {case_id:$cid})-[:STATED_IN]->(:Statement)
-        WHERE NOT (e)-[:EVIDENCED_BY]->(:File {kind:'financial_record'})
-          AND NOT EXISTS { MATCH (o:Transaction {case_id:$cid, amount:e.amount})-[:EVIDENCED_BY]->(:File {kind:'financial_record'})
+        WHERE e.recorded = false
+          AND NOT EXISTS { MATCH (o:Transaction {case_id:$cid, amount:e.amount, recorded:true})
                            WHERE e.day IS NULL OR o.day = e.day }
         OPTIONAL MATCH (e)-[:INVOLVES]->(p:Person)
         RETURN e.eid AS eid, e.amount AS amount, e.at AS at, p.name AS person""",
@@ -174,7 +178,7 @@ CYPHER = {
         RETURN x.value AS contact, labels(x) AS labels, collect(DISTINCT f.kind) AS kinds, collect(DISTINCT e.eid) AS eids""",
     "G-09": """
         MATCH (c:Case {case_id:$cid}) WHERE c.stated_total IS NOT NULL
-        OPTIONAL MATCH (e:Transaction {case_id:$cid})-[:EVIDENCED_BY]->(:File {kind:'financial_record'})
+        OPTIONAL MATCH (e:Transaction {case_id:$cid, recorded:true})
         WITH c, sum(coalesce(e.amount,0)) AS recorded, collect(e.eid) AS eids
         WHERE recorded <> c.stated_total
         RETURN c.stated_total AS stated, recorded, eids""",
@@ -188,7 +192,7 @@ def _rows_cypher(case_id: str) -> dict:
 def _rows_memory(g: Graph) -> dict:
     N = g.nodes
     lab = lambda nid, l: l in N[nid]["labels"]  # noqa: E731
-    fin = lambda eid: any(N[f]["kind"] == "financial_record" for f in g.out(eid, "EVIDENCED_BY"))  # noqa: E731
+    fin = lambda eid: N[eid]["recorded"]  # noqa: E731
     tx = [n for n in N if lab(n, "Transaction")]
     rows = {k: [] for k in CYPHER}
     for e in tx:
@@ -220,7 +224,7 @@ def _rows_memory(g: Graph) -> dict:
     return rows
 
 
-WHERE_TXT = {"financial_record": "bank records", "conversation": "chat export", "call_log": "call log", "media": "photographs"}
+WHERE_TXT = {"financial_record": "bank records", "conversation": "chat export", "call_log": "call log", "media": "screenshots"}
 
 
 def questions(rows: dict, events: dict, narration_src: dict) -> list[dict]:
@@ -280,7 +284,17 @@ def evaluate(case_id: str) -> tuple[list[dict], str]:
     return questions(rows, events, nsrc), engine
 
 
+_case_locks: defaultdict = defaultdict(threading.Lock)
+
+
 def run(case_id: str, user: str = custody.MACHINE) -> str:
+    """Serialised per case: the pipeline, Re-run checks and gap answers can all
+    trigger Gap Hunter, and two concurrent rebuilds would interleave."""
+    with _case_locks[case_id]:
+        return _run(case_id, user)
+
+
+def _run(case_id: str, user: str = custody.MACHINE) -> str:
     """Open questions are regenerated; answered/dismissed ones are kept. An open
     question whose rule no longer fires (e.g. the missing record was uploaded)
     is closed as answered by the re-check."""

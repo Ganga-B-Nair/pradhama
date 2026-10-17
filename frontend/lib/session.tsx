@@ -7,12 +7,12 @@ const ML: Record<string, string> = {
   cases: "കേസുകൾ", verify: "പരിശോധന", signout: "പുറത്തുകടക്കുക",
   complainant: "പരാതിക്കാർ", evidence: "തെളിവുകൾ", narration: "മൊഴി", analysis: "വിശകലനം", manifest: "തെളിവ് പട്ടിക",
   timeline: "സമയക്രമം", gaps: "വിട്ടുപോയ വിവരങ്ങൾ", draft: "എഫ്ഐആർ കരട്", bns: "ബിഎൻഎസ് വകുപ്പുകൾ",
-  referrals: "ഫോറൻസിക് റഫറൽ", approval: "അംഗീകാരം", export: "എക്സ്പോർട്ട്", audit: "ഓഡിറ്റ്",
+  referrals: "ഫോറൻസിക് റഫറൽ", jurisdiction: "അധികാരപരിധി", approval: "അംഗീകാരം", export: "എക്സ്പോർട്ട്", audit: "ഓഡിറ്റ്",
 };
 const EN: Record<string, string> = {
   cases: "Cases", verify: "Verify", signout: "Sign out",
   complainant: "Complainant", evidence: "Evidence", narration: "Narration", analysis: "Analysis", manifest: "Manifest",
-  timeline: "Timeline", gaps: "Gap questions", draft: "Draft FIR", bns: "BNS sections", referrals: "Referrals",
+  timeline: "Timeline", gaps: "Gap questions", draft: "Draft FIR", bns: "BNS sections", referrals: "Referrals", jurisdiction: "Jurisdiction Lookup",
   approval: "Approval", export: "Export", audit: "Audit trail",
 };
 

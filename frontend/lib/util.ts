@@ -39,7 +39,7 @@ export const csv = (rows: unknown[][]) =>
   rows.map((r) => r.map((v) => (/[",\n]/.test(String(v ?? "")) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v ?? ""))).join(",")).join("\n");
 
 export const KIND_LABEL: Record<string, string> = {
-  financial_record: "Financial record", conversation: "Conversation", media: "Media", call_log: "Call log", audio: "Audio", other: "Other",
+  financial_record: "Financial record", ip_trace: "IP trace report", conversation: "Conversation", media: "Media", call_log: "Call log", audio: "Audio", other: "Other",
 };
 export const SCREEN_TXT: Record<string, string> = {
   none: "No screening concern", review: "Recommend forensic review", not: "Not screened", na: "Not applicable",

@@ -15,6 +15,7 @@ import Gaps from "@/components/case/Gaps";
 import Draft from "@/components/case/Draft";
 import Bns from "@/components/case/Bns";
 import Referrals from "@/components/case/Referrals";
+import Jurisdiction from "@/components/case/Jurisdiction";
 import Approval from "@/components/case/Approval";
 import Export from "@/components/case/Export";
 import Audit from "@/components/case/Audit";
@@ -23,13 +24,13 @@ import { useSession } from "@/lib/session";
 import { cap, fmt } from "@/lib/util";
 
 const ROLE_TABS: Record<string, string[]> = {
-  officer: ["complainant", "evidence", "narration", "analysis", "manifest", "timeline", "gaps", "draft", "bns", "referrals", "approval"],
-  sho: ["complainant", "evidence", "narration", "analysis", "manifest", "timeline", "gaps", "draft", "bns", "referrals", "approval", "export", "audit"],
+  officer: ["complainant", "evidence", "narration", "analysis", "manifest", "timeline", "gaps", "draft", "bns", "referrals", "jurisdiction", "approval"],
+  sho: ["complainant", "evidence", "narration", "analysis", "manifest", "timeline", "gaps", "draft", "bns", "referrals", "jurisdiction", "approval", "export", "audit"],
 };
-const REVIEW = ["manifest", "timeline", "gaps", "draft", "bns", "referrals"];
+const REVIEW = ["manifest", "timeline", "gaps", "draft", "bns", "referrals", "jurisdiction"];
 const VIEWS: Record<string, () => JSX.Element> = {
   complainant: () => <Complainant />, evidence: Evidence, narration: Narration, analysis: Analysis, manifest: Manifest,
-  timeline: Timeline, gaps: Gaps, draft: Draft, bns: Bns, referrals: Referrals, approval: Approval, export: Export, audit: Audit,
+  timeline: Timeline, gaps: Gaps, draft: Draft, bns: Bns, referrals: Referrals, jurisdiction: Jurisdiction, approval: Approval, export: Export, audit: Audit,
 };
 
 function Workspace() {

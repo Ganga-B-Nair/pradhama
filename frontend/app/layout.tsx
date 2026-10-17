@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <SessionProvider>{children}</SessionProvider>
-        <footer>TRACE · demo build with fictional sample data · not for real cases · the officer files the FIR, not TRACE.</footer>
+        <footer>TRACE · AI case-assembly assistant · the officer files the FIR, not TRACE.</footer>
       </body>
     </html>
   );

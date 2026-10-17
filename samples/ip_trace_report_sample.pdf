@@ -1,0 +1,49 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 1178 >>
+stream
+BT
+/F2 15 Tf 1 0 0 1 50 800 Tm (IP ADDRESS TRACE REPORT \(SAMPLE FORMAT\)) Tj
+/F1 10 Tf 1 0 0 1 50 775 Tm (Reply to police requisition under BNSS s.94 / IT Act s.79 - sample layout for TRACE) Tj
+/F1 10 Tf 1 0 0 1 50 755 Tm (Requesting station: Cyber Police Station, Kochi City    Reference: requisition dated 05-10-2026) Tj
+/F1 10 Tf 1 0 0 1 50 735 Tm (Responding intermediary: Example Telecom Ltd \(sample\)) Tj
+/F1 10 Tf 1 0 0 1 50 715 Tm () Tj
+/F2 10 Tf 1 0 0 1 50 695 Tm (IP Address | Date/Time \(IST\) | ISP | PIN Code | Area) Tj
+/F1 10 Tf 1 0 0 1 50 675 Tm (203.0.113.24 | 01-10-2026 10:20 | Example Telecom | 682304 | Maradu, Ernakulam) Tj
+/F1 10 Tf 1 0 0 1 50 655 Tm (203.0.113.24 | 01-10-2026 14:22 | Example Telecom | 682304 | Maradu, Ernakulam) Tj
+/F1 10 Tf 1 0 0 1 50 635 Tm (198.51.100.77 | 01-10-2026 14:40 | Sample Broadband | 682030 | Kakkanad, Ernakulam) Tj
+/F1 10 Tf 1 0 0 1 50 615 Tm (192.0.2.150 | 02-10-2026 16:35 | Example Mobile | 695014 | Kazhakkoottam, Thiruvananthapuram) Tj
+/F1 10 Tf 1 0 0 1 50 595 Tm () Tj
+/F1 9 Tf 1 0 0 1 50 575 Tm (Note: IP addresses in this sample are from documentation ranges \(RFC 5737\) and do not identify any person.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000251 00000 n 
+0000001481 00000 n 
+0000001551 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+1626
+%%EOF

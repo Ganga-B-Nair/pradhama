@@ -1,5 +1,0 @@
-01-10-26 14:05 Dear Customer, A/c XX2290 debited by Rs.50,000.00 on 01Oct26, transfer to A/c XXXX4471 (IFSC HDFC0004471). -Bank
-01-10-26 14:09 Dear Customer, A/c XX2290 debited by Rs.50,000.00 on 01Oct26, transfer to A/c XXXX4471 (IFSC HDFC0004471). -Bank
-01-10-26 14:22 Dear Customer, A/c XX2290 debited by Rs.40,000.00 on 01Oct26, UPI/kychelp.desk@ybl Ref 627114. -Bank
-01-10-26 14:40 Dear Customer, A/c XX2290 debited by Rs.20,000.00 on 01Oct26, IMPS to A/c XXXX9032. -Bank
-01-10-26 14:41 Available balance in A/c XX2290 is Rs.12,310.55. -Bank

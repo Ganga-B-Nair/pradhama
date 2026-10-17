@@ -1,0 +1,11 @@
+# Never convert line endings in binary evidence samples (a PDF with no NUL bytes looks like text to git).
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.xlsx binary
+*.zip binary
+*.docx binary

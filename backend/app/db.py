@@ -49,3 +49,5 @@ def ensure_indexes() -> None:
     db.referrals.create_index("case_id")
     db.exports.create_index([("case_id", ASCENDING), ("v", ASCENDING)], unique=True)
     db.sessions.create_index("sid", unique=True)
+    db.notices.create_index("case_id")
+    db.jurisdiction_cache.create_index("pin", unique=True)

@@ -11,14 +11,13 @@ Fixed output wording: "No screening concern" | "Recommend forensic review" |
 "Not screened", always shown with the limitations line. Never fake/forged/
 authentic/synthetic.
 """
-import os
-
 import cv2
 import imagehash
 import numpy as np
 from PIL import Image
 
-from app.config import settings
+from app import storage
+from app.agents import parsers
 from app.db import get_db
 
 LIMITATION_TEXT = "Screening detects some crude edits and misses sophisticated ones. It is a referral aid, not a finding."
@@ -29,22 +28,35 @@ AUDIO_SNIFF = {"wav", "mp3", "ogg", "m4a"}
 BANK_MARKERS = ("debited", "credited", "a/c", "upi", "avl bal", "available balance", "imps", "neft", "rtgs")
 
 
-def classify(f: dict, sample_text: str) -> str:
+def classify(f: dict, lines: list[str] | None) -> str:
+    """By content first (it's what the parsers will read), then by filename."""
     name, sniff = f["name"].lower(), f.get("sniff")
     if sniff in IMAGE_SNIFF or sniff == "heic":
         return "media"
-    if sniff in AUDIO_SNIFF:
+    if sniff in AUDIO_SNIFF or sniff == "webm":
         return "audio"
-    if "call" in name and f["ext"] in (".csv", ".txt"):
-        return "call_log"
-    if sniff == "pdf":
+    if not lines:
+        return "financial_record" if sniff == "pdf" or any(k in name for k in ("statement", "bank", "passbook")) else "other"
+    head = lines[:300]
+    if parsers.parse_ip_traces({"ev_id": ""}, head, 2000):
+        return "ip_trace"  # rows with an IP address and a PIN code
+    if sum(1 for ln in head if (m := parsers.WA_HEAD.match(ln.strip())) and ": " in m.group("rest")) >= 2:
+        return "conversation"
+    if f["ext"] == ".csv":
+        _reader, col = parsers.csv_rows(head)
+        if col["number"] and (col["duration"] or col["type"]) and not col["body"]:
+            return "call_log"
+        if col["body"]:
+            return "financial_record" if any(m in " ".join(head).lower() for m in BANK_MARKERS) else "conversation"
+    if parsers.looks_like_statement(head) or sniff == "pdf" or f["ext"] == ".xlsx":
         return "financial_record"
-    if f["ext"] in (".txt", ".csv"):
-        low = sample_text.lower()
-        if any(m in low for m in BANK_MARKERS) or any(k in name for k in ("bank", "sms", "statement", "upi", "txn")):
-            return "financial_record"
-        if any(k in name for k in ("chat", "whatsapp", "telegram", "message")) or " - " in sample_text or "] " in sample_text:
-            return "conversation"
+    low = " ".join(head).lower()
+    if any(m in low for m in BANK_MARKERS) or any(k in name for k in ("bank", "sms", "statement", "upi", "txn")):
+        return "financial_record"
+    if "call" in name:
+        return "call_log"
+    if any(k in name for k in ("chat", "whatsapp", "telegram", "message")):
+        return "conversation"
     return "other"
 
 
@@ -94,9 +106,9 @@ def periodic_peak_score(gray: np.ndarray) -> float:
     return float(peaks) / (h * w) * 1e4
 
 
-def screen_image(path: str) -> dict:
+def screen_image(sha: str) -> dict:
     try:
-        with Image.open(path) as img:
+        with Image.open(storage.stream(sha)) as img:
             quality = jpeg_quality(img)
             img.load()
             gray = np.array(img.convert("L"))
@@ -119,24 +131,22 @@ def screen_image(path: str) -> dict:
             "jpeg_quality": quality}
 
 
-def _phash(path: str) -> str | None:
+def _phash(sha: str) -> str | None:
     try:
-        with Image.open(path) as img:
+        with Image.open(storage.stream(sha)) as img:
             return str(imagehash.phash(img))
     except Exception:
         return None
 
 
-def evidence_path(f: dict) -> str:
-    return os.path.join(settings.evidence_dir, f["sha256"])
-
-
-def read_text(f: dict, limit: int | None = None) -> str:
+def ocr(f: dict) -> str:
+    """Text read off a screenshot or photo (Tesseract, English). Empty when the
+    image has no readable text or OCR isn't installed."""
     try:
-        with open(evidence_path(f), "r", encoding="utf-8", errors="ignore") as fh:
-            return fh.read(limit) if limit else fh.read()
-    except OSError:
+        text = parsers.ocr_text(storage.get(f["sha256"]))
+    except Exception:  # noqa: BLE001 - OCR is best effort
         return ""
+    return text.strip() if len(text.strip()) >= 12 else ""
 
 
 def run(case_id: str) -> str:
@@ -144,18 +154,20 @@ def run(case_id: str) -> str:
     files = list(db.files.find({"case_id": case_id, "status": "accepted"}).sort("uploaded_at", 1))
     for f in files:
         update: dict = {}
-        text = read_text(f, 4096) if f["ext"] in (".txt", ".csv") else ""
+        if f.get("sniff") in IMAGE_SNIFF and f.get("ocr") is None:
+            update["ocr"] = f["ocr"] = ocr(f)
+        lines = None if f.get("sniff") in IMAGE_SNIFF or f.get("narration") else parsers.text_lines(f)
         if not f.get("kind"):
-            update["kind"] = "audio" if f.get("narration") else classify(f, text)
+            update["kind"] = "audio" if f.get("narration") else classify(f, lines)
         kind = update.get("kind", f.get("kind"))
-        if kind in ("conversation", "financial_record", "call_log", "other") and f["ext"] in (".txt", ".csv"):
-            update["lang"] = detect_language(read_text(f))
+        if lines:
+            update["lang"] = detect_language("\n".join(lines[:500]))
         elif kind == "audio":
             update["lang"] = "Malayalam" if f.get("narration") else "—"
         if f.get("screen") is None:
             if f.get("sniff") in IMAGE_SNIFF:
-                update["screen"] = screen_image(evidence_path(f))
-                update["phash"] = _phash(evidence_path(f))
+                update["screen"] = screen_image(f["sha256"])
+                update["phash"] = _phash(f["sha256"])
             elif f.get("sniff") == "heic":
                 update["screen"] = {"status": "not", "score": None, "reasons": ["HEIC images are not screened in v1"]}
             elif kind == "audio":

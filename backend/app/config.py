@@ -25,7 +25,6 @@ class Settings:
     insightlaw_base_url: str = os.getenv("INSIGHTLAW_BASE_URL", "https://insightlaw.in")
     insightlaw_timeout_seconds: float = float(os.getenv("INSIGHTLAW_TIMEOUT_SECONDS", "5"))
 
-    evidence_dir: str = os.getenv("EVIDENCE_DIR", "../evidence")
     cache_dir: str = os.getenv("CACHE_DIR", "../cache")
     # PUBLIC_BASE_URL: the frontend's LAN-reachable origin, encoded in the QR
     # code. A phone can't reach `localhost`, so set it to http://<LAN IP>:3000
@@ -34,6 +33,11 @@ class Settings:
     # Golden-run cache (§9): when a model stage fails, reuse its last good output.
     demo_cache: bool = os.getenv("DEMO_CACHE", "0") == "1"
     code_version: str = os.getenv("CODE_VERSION", "dev")
+
+    # Jurisdiction Lookup (Google Places + Kerala Police nearby-stations service).
+    google_maps_api_key: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    kerala_police_base_url: str = os.getenv("KERALA_POLICE_BASE_URL", "https://ps.keralapolice.gov.in")
+    jurisdiction_online: bool = os.getenv("JURISDICTION_ONLINE", "1") == "1"
 
     station_code: str = os.getenv("STATION_CODE", "KCPS")
     station_name: str = os.getenv("STATION_NAME", "Cyber Police Station, Kochi City")

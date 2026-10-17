@@ -39,17 +39,16 @@ export default function SourceModal({ src, onClose }: { src: Src; onClose: () =>
       {err ? <p>{err}</p> : !f ? <p className="muted">Loading…</p> : <>
         <h2>{f.ev_id} · {f.name}</h2>
         <p className="muted small">SHA-256 <span className="mono">{f.sha256}</span> · viewing is recorded in the audit trail</p>
-        {f.lines ? (
+        {["jpg", "png", "webp"].includes(f.sniff) && <img alt={f.name} style={{ maxWidth: "100%", maxHeight: 360 }} src={`/api/cases/${c.id}/files/${f.ev_id}/raw`} />}
+        {["wav", "mp3", "ogg", "m4a", "webm"].includes(f.sniff) && <audio controls src={`/api/cases/${c.id}/files/${f.ev_id}/raw`} style={{ width: "100%" }} />}
+        {f.lines?.length ? <>
+          {f.ocr != null && <p className="small muted">Text read from the image (OCR, may contain errors):</p>}
           <div className="lines">
             {f.lines.map((t: string, i: number) => (
               <div key={i} className={i + 1 === src.l ? "hl" : ""} ref={i + 1 === src.l ? hl : undefined}><span>{i + 1}</span>{t}</div>
             ))}
           </div>
-        ) : ["jpg", "png", "webp"].includes(f.sniff) ? (
-          <img alt={f.name} style={{ maxWidth: "100%", maxHeight: 360 }} src={`/api/cases/${c.id}/files/${f.ev_id}/raw`} />
-        ) : ["wav", "mp3", "ogg", "m4a", "webm"].includes(f.sniff) ? (
-          <audio controls src={`/api/cases/${c.id}/files/${f.ev_id}/raw`} style={{ width: "100%" }} />
-        ) : <p className="muted">No preview for this file type.</p>}
+        </> : !["jpg", "png", "webp", "wav", "mp3", "ogg", "m4a", "webm"].includes(f.sniff) && <p className="muted">No readable text in this file.</p>}
         {f.meta && Object.keys(f.meta.fields || {}).length > 0 && <>
           <h3>Metadata</h3>
           <table><tbody>
