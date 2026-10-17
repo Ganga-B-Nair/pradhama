@@ -45,6 +45,9 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       DEMO_CACHE: ${DEMO_CACHE:-1}
       BNS_MODE: ${BNS_MODE:-fixture}
+      # Jurisdiction Lookup: the key comes from the git-ignored .env file next to this one.
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+      JURISDICTION_ONLINE: ${JURISDICTION_ONLINE:-1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

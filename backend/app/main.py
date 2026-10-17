@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import ensure_indexes
-from app.routes import analysis, auth, cases, export, files
+from app.routes import analysis, auth, cases, export, files, jurisdiction
 from app.worker import job_queue, resume_interrupted, worker_loop
 
 logging.basicConfig(level=logging.INFO)
@@ -24,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for router in [auth.router, cases.router, files.router, analysis.router, export.router]:
+for router in [auth.router, cases.router, files.router, analysis.router, export.router, jurisdiction.router]:
     app.include_router(router)
 
 
