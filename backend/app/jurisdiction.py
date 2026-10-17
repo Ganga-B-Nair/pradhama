@@ -34,10 +34,21 @@ UA = "Mozilla/5.0 (TRACE station assistant)"
 PIN_RE = re.compile(r"(?<![\d.])([1-8]\d{5})(?![\d.])")
 
 
-def norm_station(name: str) -> str:
-    n = (name or "").lower()
-    n = re.sub(r"\b(police\s+station|police|station|ps|p\.s\.)\b", " ", n)
-    return re.sub(r"[^a-z]", "", n)
+NOT_A_NAME = {"police", "station", "ps", "p", "s", "the", "of", "kerala", "india"}
+GENERIC = NOT_A_NAME | {"city", "town"}
+
+
+def station_words(name: str, drop: set[str] = GENERIC) -> set[str]:
+    """Distinctive words of a station name, so that "Kasaba Police Station, Kozhikode"
+    and "Kozhikode City Kasaba" compare equal regardless of word order."""
+    return {w for w in re.findall(r"[a-z]+", (name or "").lower()) if w not in drop}
+
+
+def same_station(a: str, b: str) -> bool:
+    wa, wb = station_words(a), station_words(b)
+    if not wa or not wb:  # e.g. "Town Police Station": compare on "town" / "city" too
+        wa, wb = station_words(a, NOT_A_NAME), station_words(b, NOT_A_NAME)
+    return bool(wa and wb) and (wa <= wb or wb <= wa)
 
 
 def google_station(pin: str) -> dict:
@@ -108,8 +119,7 @@ def lookup(pin: str) -> dict:
 
     verdict, why = "unverified", "One of the two sources was unavailable, so the result could not be cross-checked."
     if g and kp:
-        gname = norm_station(g["best"]["name"])
-        hits = [i for i, s in enumerate(kp) if norm_station(s["name"]) and (norm_station(s["name"]) in gname or gname in norm_station(s["name"]))]
+        hits = [i for i, s in enumerate(kp) if same_station(g["best"]["name"], s["name"])]
         if hits and hits[0] == 0:
             verdict, why = "match", f"Google's station ({g['best']['name']}) is Kerala Police's nearest station ({kp[0]['name']})."
         elif hits:

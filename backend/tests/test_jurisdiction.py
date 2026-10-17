@@ -39,6 +39,20 @@ def test_parser_ignores_lines_without_a_pin():
     assert parsers.parse_ip_traces({"ev_id": "x"}, ["Login from 203.0.113.24 at 10:20"], 2026) == []
 
 
+@pytest.mark.parametrize("google,kerala,same", [
+    ("Maradu Police Station", "Maradu", True),
+    ("Kasaba Police Station, Kozhikode", "Kozhikode City Kasaba", True),  # word order differs
+    ("Thrikkakara Janamaithri Police Station", "Thrikkakara", True),
+    ("Thampanoor Police Station Thiruvananthapuram", "Thiruvananthapuram Railway", False),
+    ("Kasaba Police Station, Kozhikode", "Kozhikode City Vanitha", False),
+    ("Town Police Station", "Kozhikode City Town", True),  # only a generic word to go on
+    ("Thrissur East Police Station", "THRISSUR TOWN EAST", True),
+    ("Police Station", "Maradu", False),  # nothing distinctive to compare
+])
+def test_station_names_compare_by_distinctive_words(google, kerala, same):
+    assert jurisdiction.same_station(google, kerala) is same
+
+
 @pytest.mark.parametrize("kp,verdict,recommended", [
     (KP, "match", ["Maradu"]),
     (list(reversed(KP)), "partial", ["Panangad"]),
