@@ -66,7 +66,7 @@ export default function Draft() {
         </tbody></table>
         <h3>Narrative</h3>
         {unsupported > 0 && <div className="note badbar small">{unsupported} sentence(s) marked <b>Unsupported — needs officer review</b>: they cite no valid event, or state an amount none of their events carry.</div>}
-        <div className="box" style={{ maxWidth: 900 }}>
+        <div className="box" style={{ maxWidth: "var(--measure)" }}>
           {sents.map((s, i) => (
             <span key={i}><span className={`sent ${hover === i ? "on" : ""} ${s.supported === false ? "unsup" : ""}`} onMouseEnter={() => setHover(i)}>{s.t}</span>{s.supported === false && <span className="bad small"> [Unsupported — needs officer review]</span>} </span>
           ))}

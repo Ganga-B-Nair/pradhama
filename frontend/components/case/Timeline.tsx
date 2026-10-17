@@ -39,7 +39,7 @@ export default function Timeline() {
           <text x={clamp(X(t), 24, 940)} y="56">{fmt(new Date(t).toISOString(), !!f.day).replace(/, \d{4}/, "").replace(/ \d{4}/, "")}</text>
         </g>)}
         {ev.map((e) => (
-          <circle key={e.id} cx={X(Date.parse(e.at))} cy="30" r="6" fill={e.prec === "exact" ? "#1d4ed8" : "#fff"} stroke="#1d4ed8" strokeWidth="2" style={{ cursor: "pointer" }}
+          <circle key={e.id} cx={X(Date.parse(e.at))} cy="30" r="6" fill={e.prec === "exact" ? "#000000" : "#fff"} stroke="#000000" strokeWidth="2" style={{ cursor: "pointer" }}
             onClick={() => { setHl(e.id); document.getElementById("ev-" + e.id)?.scrollIntoView({ block: "center" }); }}>
             <title>{fmt(e.at)} · {e.action}</title>
           </circle>
